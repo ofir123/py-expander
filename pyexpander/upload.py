@@ -97,6 +97,10 @@ def upload_file(file_path):
         # Check results.
         if process.returncode != 0:
             logger.error('Bad return code ({}) for file: {}'.format(process.returncode, file_path))
+            # Sometimes we get return code 8, even when everything went fine, so just delete the files.
+            if process.returncode == 8:
+                logger.info('Deleting file anyway...')
+                os.remove(file_path)
         else:
             logger.info('Upload succeeded! Deleting original file...')
             # If everything went smoothly, add the file name to the original names log.
