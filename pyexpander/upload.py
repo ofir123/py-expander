@@ -95,18 +95,16 @@ def upload_file(file_path):
         process = subprocess.run('{} upload -o --remove-source-files "{}" "{}"'.format(
             config.ACD_CLI_PATH, new_path, cloud_dir), shell=True)
         # Check results.
-        if process.returncode != 0:
+        if process.returncode not in [0, 8]:
             logger.error('Bad return code ({}) for file: {}'.format(process.returncode, file_path))
-            # Sometimes we get return code 8, even when everything went fine, so just delete the files.
-            if process.returncode == 8:
-                logger.info('Deleting file anyway...')
-                os.remove(file_path)
         else:
             logger.info('Upload succeeded! Deleting original file...')
             # If everything went smoothly, add the file name to the original names log.
             if not is_subtitles:
                 open(config.ORIGINAL_NAMES_LOG, 'a', encoding='UTF-8').write(file_path + '\n')
-            # Sync again when done.
-            _sync()
+        # Sometimes we get return code 8, even when everything went fine, so just delete the files.
+        if process.returncode == 8:
+            logger.info('Notice that the return code was 8 and not 0 as expected...')
+            os.remove(file_path)
     else:
         logger.info('Couldn\'t guess file info. Skipping...')
