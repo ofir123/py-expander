@@ -38,6 +38,7 @@ def _delete_archive(archive_path):
     files_to_delete = {archive_path}
     # Find all related archives.
     archive_name, archive_extension = os.path.splitext(archive_path)
+    archive_name = os.path.basename(archive_name)
     archive_directory = os.path.dirname(archive_path)
     for file_name in os.listdir(archive_directory):
         file_path = os.path.join(archive_directory, file_name)
