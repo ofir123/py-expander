@@ -50,6 +50,7 @@ def _delete_archive(archive_path):
             files_to_delete.add(file_path)
     # Delete everything.
     for file_path in files_to_delete:
+        logger.info('Deleting {}'.format(file_path))
         os.remove(file_path)
 
 
@@ -102,6 +103,7 @@ def extract_all(directory):
             for target_archive in archives_to_extract:
                 logger.info('Extracting {} to {}'.format(target_archive, current_dir))
                 _extract_archive(target_archive, current_dir)
+                logger.info('Deleting original archives...')
                 _delete_archive(target_archive)
 
             iteration += 1
