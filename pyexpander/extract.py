@@ -13,7 +13,7 @@ ARCHIVE_EXTENSIONS = ['.rar', '.zip', '.7z']
 logger = logbook.Logger('extractor')
 
 
-def _extract(archive_path, destination):
+def _extract_archive(archive_path, destination):
     """
     Extract archive content to destination.
 
@@ -27,6 +27,30 @@ def _extract(archive_path, destination):
     # Change current working directory since 7Zip only works with e flag.
     output = subprocess.check_output(process_info, cwd=destination)
     logger.debug('Output: {}'.format(output))
+
+
+def _delete_archive(archive_path):
+    """
+    Delete all archive-related files.
+
+    :param archive_path: The path of the archive file to delete.
+    """
+    files_to_delete = {archive_path}
+    # Find all related archives.
+    archive_name, archive_extension = os.path.splitext(archive_path)
+    archive_directory = os.path.dirname(archive_path)
+    for file_name in os.listdir(archive_directory):
+        file_path = os.path.join(archive_directory, file_name)
+        file_parts = os.path.splitext(file_path)
+        # Delete all RAR parts (.rar, .r01, .r02, ...).
+        if file_parts[0] == archive_name and file_parts[1].lower().startswith('r'):
+            files_to_delete.add(file_path)
+        # Delete all parts (.part01.rar, .part02.rar, ...).
+        elif file_parts[1] == archive_extension and archive_name in file_parts[0] and 'part' in file_parts[0].lower():
+            files_to_delete.add(file_path)
+    # Delete everything.
+    for file_path in files_to_delete:
+        os.remove(file_path)
 
 
 def _find_target_archives(directory):
@@ -57,9 +81,9 @@ def _find_target_archives(directory):
 
 def extract_all(directory):
     """
-    recursively extracts all archives in directory.
+    recursively extracts all archives in directory, and deletes original archive files.
     recursive extraction is iterative and is saved under:
-    /directory/config.EXTRACTION_TEMP_DIR_NAME/unpacked_{iteration number}
+    /directory/{config.EXTRACTION_TEMP_DIR_NAME}/unpacked_{iteration number}
 
     :param directory: The directory to extract archives from.
     """
@@ -77,7 +101,8 @@ def extract_all(directory):
 
             for target_archive in archives_to_extract:
                 logger.info('Extracting {} to {}'.format(target_archive, current_dir))
-                _extract(target_archive, current_dir)
+                _extract_archive(target_archive, current_dir)
+                _delete_archive(target_archive)
 
             iteration += 1
             archives_to_extract = _find_target_archives(current_dir)
