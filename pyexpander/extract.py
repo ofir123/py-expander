@@ -44,7 +44,7 @@ def _delete_archive(archive_path):
         file_path = os.path.join(archive_directory, file_name)
         file_parts = os.path.splitext(file_name)
         # Delete all RAR parts (.rar, .r01, .r02, ...).
-        if file_parts[0] == archive_name and file_parts[1].lower().startswith('r'):
+        if file_parts[0] == archive_name and file_parts[1].lower().startswith('.r'):
             files_to_delete.add(file_path)
         # Delete all parts (.part01.rar, .part02.rar, ...).
         elif file_parts[1] == archive_extension and archive_name in file_parts[0] and 'part' in file_parts[0].lower():
