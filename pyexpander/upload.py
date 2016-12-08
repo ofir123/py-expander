@@ -52,6 +52,9 @@ def upload_file(file_path):
             fixed_file_name, language_extension = file_parts
             if language_extension in config.LANGUAGE_EXTENSIONS:
                 fixed_file_path = fixed_file_name + config.DEFAULT_VIDEO_EXTENSION
+            else:
+                language_extension = config.DEFAULT_LANGUAGE_EXTENSION
+                fixed_file_path = file_name + config.DEFAULT_VIDEO_EXTENSION
     # Create cloud path based on guessit results.
     cloud_dir = None
     cloud_file = None
