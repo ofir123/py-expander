@@ -25,8 +25,10 @@ LANGUAGES_MAP = {
 
 # Upload settings.
 SHOULD_UPLOAD = True
+MAX_UPLOAD_TRIES = 3
 ACD_CLI_PATH = '/usr/bin/acd_cli'
 DEFAULT_VIDEO_EXTENSION = '.mkv'
+DEFAULT_LANGUAGE_EXTENSION = '.en'
 SUBTITLES_EXTENSIONS = ['.srt']
 LANGUAGE_EXTENSIONS = ['.he', '.en']
 # Lists.

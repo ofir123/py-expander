@@ -94,20 +94,27 @@ def upload_file(file_path):
             current_dir += '/{}'.format(directory)
             subprocess.run('{} mkdir "{}"'.format(config.ACD_CLI_PATH, current_dir), shell=True)
         # Upload!
-        logger.info('Uploading file...')
-        process = subprocess.run('{} upload -o --remove-source-files "{}" "{}"'.format(
-            config.ACD_CLI_PATH, new_path, cloud_dir), shell=True)
-        # Check results.
-        if process.returncode not in [0, 8]:
-            logger.error('Bad return code ({}) for file: {}'.format(process.returncode, new_path))
-        else:
+        upload_tries = 0
+        return_code = 1
+        while return_code != 0 and upload_tries < config.MAX_UPLOAD_TRIES:
+            logger.info('Uploading file...')
+            upload_tries += 1
+            process = subprocess.run('{} upload -o --remove-source-files "{}" "{}"'.format(
+                config.ACD_CLI_PATH, new_path, cloud_dir), shell=True)
+            # Check results.
+            return_code = process.returncode
+            if return_code != 0:
+                logger.error('Bad return code ({}) for file: {}'.format(process.returncode, new_path))
+                if upload_tries < config.MAX_UPLOAD_TRIES:
+                    logger.info('Trying again!')
+                    # Sync in case the file was actually uploaded.
+                    _sync()
+                else:
+                    logger.error('Max retries with no success! Skipping...')
+        # If everything went smoothly, add the file name to the original names log.
+        if return_code == 0:
             logger.info('Upload succeeded! Deleting original file...')
-            # If everything went smoothly, add the file name to the original names log.
             if not is_subtitles:
                 open(config.ORIGINAL_NAMES_LOG, 'a', encoding='UTF-8').write(file_path + '\n')
-        # Sometimes we get return code 8, even when everything went fine, so just delete the files.
-        if process.returncode == 8:
-            logger.info('Notice that the return code was 8 and not 0 as expected...')
-            os.remove(new_path)
     else:
         logger.info('Couldn\'t guess file info. Skipping...')
