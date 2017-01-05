@@ -114,6 +114,8 @@ def upload_file(file_path):
         # If everything went smoothly, add the file name to the original names log.
         if return_code == 0:
             logger.info('Upload succeeded! Deleting original file...')
+            if os.path.isfile(new_path):
+                os.remove(new_path)
             if not is_subtitles:
                 open(config.ORIGINAL_NAMES_LOG, 'a', encoding='UTF-8').write(file_path + '\n')
     else:
