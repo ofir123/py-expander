@@ -34,9 +34,9 @@ def _encrypt(encrypted_dir, plain_dir):
     logger.info('Encrypting directory tree...')
     # Verify config environment variable first.
     if not os.environ.get(config.ENCFS_ENVIRONMENT_VARIABLE):
-        logger.error('{} environment variable is not defined. Stopping!'.format(
-            config.ENCFS_ENVIRONMENT_VARIABLE))
-        return False
+        logger.info('{} environment variable is not defined. Defining: {}'.format(
+            config.ENCFS_ENVIRONMENT_VARIABLE, config.ENCFS_CONFIG_PATH))
+        os.environ[config.ENCFS_ENVIRONMENT_VARIABLE] = config.ENCFS_CONFIG_PATH
     # Encrypt!
     os.makedirs(encrypted_dir)
     encryption_process = subprocess.run('echo {} | {} -S "{}" "{}"'.format(
