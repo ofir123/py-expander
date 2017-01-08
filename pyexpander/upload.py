@@ -1,6 +1,8 @@
 import os
 import subprocess
-import posixpath
+import shutil
+import random
+import string
 
 import logbook
 from guessit import guessit
@@ -19,6 +21,31 @@ def _sync():
         logger.error('Bad return code ({}) for sync'.format(process.returncode))
     else:
         logger.info('Sync succeeded!')
+
+
+def _encrypt(encrypted_dir, plain_dir):
+    """
+    Encrypt the given plain directory.
+
+    :param encrypted_dir: The encrypted directory to create.
+    :param plain_dir: The plain directory to encrypt (recursively).
+    :return: True if succeeded, and False otherwise.
+    """
+    logger.info('Encrypting directory tree...')
+    # Verify config environment variable first.
+    if not os.environ.get(config.ENCFS_ENVIRONMENT_VARIABLE):
+        logger.error('{} environment variable is not defined. Stopping!'.format(
+            config.ENCFS_ENVIRONMENT_VARIABLE))
+        return False
+    # Encrypt!
+    os.makedirs(encrypted_dir)
+    encryption_process = subprocess.run('echo {} | {} -S "{}" "{}"'.format(
+        config.ENCFS_PASSWORD, config.ENCFS_PATH, encrypted_dir, plain_dir), shell=True)
+    encryption_return_code = encryption_process.returncode
+    if encryption_return_code != 0:
+        logger.error('Bad return code ({}) for encryption. Stopping!'.format(encryption_return_code))
+        return False
+    return True
 
 
 def upload_file(file_path):
@@ -69,42 +96,55 @@ def upload_file(file_path):
         if season:
             episode = guess_results.get('episode')
             if episode:
-                cloud_dir = '{}/{}/Season {:02d}'.format(config.AMAZON_TV_PATH, title, season)
+                cloud_dir = '{}/{}/Season {:02d}'.format(config.CLOUD_TV_PATH, title, season)
                 cloud_file = '{} - S{:02d}E{:02d}'.format(title, season, episode)
     elif video_type == 'movie' and title:
         year = guess_results.get('year')
         if year:
-            cloud_dir = '{}/{} ({})'.format(config.AMAZON_MOVIE_PATH, title, year)
+            cloud_dir = '{}/{} ({})'.format(config.CLOUD_MOVIE_PATH, title, year)
             cloud_file = '{} ({})'.format(title, year)
     if cloud_dir and cloud_file:
         if language_extension:
             cloud_file += language_extension
         cloud_file += file_extension
-        logger.info('Cloud path: {}'.format(posixpath.join(cloud_dir, cloud_file)))
-        # Rename local file before upload.
-        base_dir = os.path.dirname(file_path)
-        new_path = os.path.join(base_dir, cloud_file)
-        os.rename(file_path, new_path)
+        logger.info('Cloud path: {}'.format(os.path.join(cloud_dir, cloud_file)))
+        # Create a temporary random cloud dir structure.
+        original_dir = os.path.dirname(file_path)
+        random_dir_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
+        base_dir = os.path.join(original_dir, random_dir_name)
+        plain_base_dir = os.path.join(base_dir, config.CLOUD_PLAIN_PATH)
+        os.makedirs(plain_base_dir)
+        cloud_temp_path = os.path.join(plain_base_dir, cloud_dir)
+        final_file_path = os.path.join(cloud_temp_path, cloud_file)
+        # Use the plain directory when uploading, unless encryption is enabled.
+        upload_base_dir = plain_base_dir
+        # Set up encryption if needed.
+        if config.SHOULD_ENCRYPT:
+            encrypted_base_dir = os.path.join(base_dir, config.CLOUD_ENCRYPTED_PATH)
+            encryption_successful = _encrypt(encrypted_base_dir, plain_base_dir)
+            if not encryption_successful:
+                # Delete directories and stop.
+                shutil.rmtree(base_dir)
+                return
+            # Upload the encrypted directory tree instead of the plain one.
+            upload_base_dir = encrypted_base_dir
+        logger.info('Moving file to temporary path: {}'.format(cloud_temp_path))
+        os.makedirs(cloud_temp_path)
+        shutil.move(file_path, cloud_temp_path)
+        os.rename(os.path.join(cloud_temp_path, os.path.basename(file_path)), final_file_path)
         # Sync first.
         _sync()
-        # Create cloud dirs.
-        logger.info('Creating directories...')
-        current_dir = ''
-        for directory in cloud_dir.split('/'):
-            current_dir += '/{}'.format(directory)
-            subprocess.run('{} mkdir "{}"'.format(config.ACD_CLI_PATH, current_dir), shell=True)
         # Upload!
         upload_tries = 0
         return_code = 1
         while return_code != 0 and upload_tries < config.MAX_UPLOAD_TRIES:
             logger.info('Uploading file...')
             upload_tries += 1
-            process = subprocess.run('{} upload -o --remove-source-files "{}" "{}"'.format(
-                config.ACD_CLI_PATH, new_path, cloud_dir), shell=True)
+            process = subprocess.run('{} upload "{}" /'.format(config.ACD_CLI_PATH, upload_base_dir), shell=True)
             # Check results.
             return_code = process.returncode
             if return_code != 0:
-                logger.error('Bad return code ({}) for file: {}'.format(process.returncode, new_path))
+                logger.error('Bad return code ({}) for file: {}'.format(process.returncode, cloud_file))
                 if upload_tries < config.MAX_UPLOAD_TRIES:
                     logger.info('Trying again!')
                     # Sync in case the file was actually uploaded.
@@ -114,9 +154,17 @@ def upload_file(file_path):
         # If everything went smoothly, add the file name to the original names log.
         if return_code == 0:
             logger.info('Upload succeeded! Deleting original file...')
-            if os.path.isfile(new_path):
-                os.remove(new_path)
             if not is_subtitles:
                 open(config.ORIGINAL_NAMES_LOG, 'a', encoding='UTF-8').write(file_path + '\n')
+        else:
+            # Reverse everything.
+            logger.info('Upload failed! Reversing all changes...')
+            shutil.move(final_file_path, original_dir)
+            os.rename(os.path.join(original_dir, cloud_file), file_path)
+        # Unmount ENCFS directory.
+        if config.SHOULD_ENCRYPT:
+            subprocess.run('{} -u "{}"'.format(config.FUSERMOUNT_PATH, plain_base_dir), shell=True)
+        # Delete all temporary directories.
+        shutil.rmtree(base_dir)
     else:
         logger.info('Couldn\'t guess file info. Skipping...')

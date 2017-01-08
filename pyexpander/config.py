@@ -1,14 +1,17 @@
 import babelfish
 
 # Directories settings.
-TV_PATH = '/tv/directory'
-MOVIE_PATH = '/movies/directory'
-APP_PATH = '/apps/directory'
-MUSIC_PATH = '/music/directory'
+DATA_PATH = '/data/directory'
 DEFAULT_PATH = '/'
+# Cloud directories settings.
+CLOUD_ENCRYPTED_PATH = 'Encrypted'
+CLOUD_PLAIN_PATH = 'Media'
+CLOUD_TV_PATH = 'TV'
+CLOUD_MOVIE_PATH = 'Movies'
 
 # Log settings.
 LOGFILE = '/var/log/pyexp.log'
+ORIGINAL_NAMES_LOG = '/var/log/original_names.log'
 
 # Extraction settings.
 EXTRACTION_FILES_MASK = '770'
@@ -31,10 +34,13 @@ DEFAULT_VIDEO_EXTENSION = '.mkv'
 DEFAULT_LANGUAGE_EXTENSION = '.en'
 SUBTITLES_EXTENSIONS = ['.srt']
 LANGUAGE_EXTENSIONS = ['.he', '.en']
+# encfs settings.
+SHOULD_ENCRYPT = True
+ENCFS_PATH = '/usr/bin/encfs'
+FUSERMOUNT_PATH = '/usr/bin/fusermount'
+ENCFS_ENVIRONMENT_VARIABLE = 'ENCFS6_CONFIG'
+ENCFS_PASSWORD = 'Password1'
+
 # Lists.
 EXTENSIONS_WHITE_LIST = ['.srt', '.mkv', '.avi', '.mp4', '.mov', '.m4v', '.wmv']
 NAMES_BLACK_LIST = ['sample']
-# Directories settings.
-AMAZON_TV_PATH = '/amazon/tv/path'
-AMAZON_MOVIE_PATH = '/amazon/movies/path'
-ORIGINAL_NAMES_LOG = '/var/log/original_names.log'

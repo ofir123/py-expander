@@ -4,7 +4,7 @@ py-expander
 A python script designed to post-process Transmission torrents.
 
 The script extracts files recursively (if extract is necessary)
-and the moves the files to pre-configured directories based on their type.
+and the moves the files to a separate data directory.  
 If no RARs are present in the download - the script will copy the files.
 
 The script relies on the 'guessit' package to detect movies/tv downloads.
