@@ -6,7 +6,7 @@ import sys
 import logbook
 
 from pyexpander import config
-from pyexpander.extract import extract_all, cleanup_temp
+from pyexpander.extract import extract_all, cleanup
 from pyexpander.postprocess import process_directory, process_file
 from pyexpander.subtitles import configure_subtitles_cache
 from pyexpander.transmission import get_environment_variables_from_transmission
@@ -41,7 +41,7 @@ def expand_torrent(torrent_path):
         torrent_path = os.path.join(torrent_path, '')
         extract_all(torrent_path)
         process_directory(torrent_path)
-        cleanup_temp(torrent_path)
+        cleanup(torrent_path)
     else:
         process_file(shutil.move, os.path.splitext(os.path.basename(torrent_path))[0], torrent_path)
     logger.info('Done!')
