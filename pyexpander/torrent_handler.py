@@ -1,6 +1,5 @@
 #!/usr/local/bin/python3.5
 import os
-import shutil
 import sys
 
 import logbook
@@ -29,7 +28,7 @@ def _get_log_handlers():
 
 def expand_torrent(torrent_path):
     """
-    Perform torrent expansion steps - extraction, moving to relevant directory and cleanup.
+    Perform torrent expansion steps - extraction, copying/moving to relevant directory and cleanup.
 
     :param torrent_path: The torrent path to expand.
     """
@@ -43,7 +42,7 @@ def expand_torrent(torrent_path):
         process_directory(torrent_path)
         cleanup(torrent_path)
     else:
-        process_file(shutil.move, os.path.splitext(os.path.basename(torrent_path))[0], torrent_path)
+        process_file(os.path.splitext(os.path.basename(torrent_path))[0], torrent_path)
     logger.info('Done!')
 
 

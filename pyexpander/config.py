@@ -1,3 +1,5 @@
+import shutil
+
 import babelfish
 
 # Directories settings.
@@ -8,6 +10,10 @@ CLOUD_ENCRYPTED_PATH = 'Encrypted'
 CLOUD_PLAIN_PATH = 'Media'
 CLOUD_TV_PATH = 'TV'
 CLOUD_MOVIE_PATH = 'Movies'
+
+# Post-process settings.
+# Change shutil.move to shutil.copy in order to preserve original downloads.
+FILE_HANDLER = shutil.move
 
 # Log settings.
 LOGFILE = '/var/log/pyexp.log'

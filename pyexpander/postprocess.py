@@ -1,6 +1,5 @@
 import errno
 import os
-import shutil
 import subprocess
 
 import logbook
@@ -28,14 +27,14 @@ def _create_destination_path(directory_path):
                 raise
 
 
-def process_file(handler, torrent_name, file_path):
+def process_file(torrent_name, file_path):
     """
     Processes a single file with the given handler.
 
-    :param handler: The handler to use.
     :param torrent_name: The relevant torrent name.
     :param file_path: The file path to process.
     """
+    handler = config.FILE_HANDLER
     filename = os.path.basename(file_path)
     destination_dir = os.path.join(config.DATA_PATH, torrent_name)
     # Creates target directory (of category path).
@@ -61,36 +60,17 @@ def process_file(handler, torrent_name, file_path):
         logger.exception('Failed to {} {}: {}'.format(handler.__name__, file_path, ex))
 
 
-def _handle_directory(directory, handler, torrent_name):
-    """
-    The main directory processing function.
-    It's called by the _choose_handler function with the proper handling command for the
-    files to process (copy/move).
-    It searches for files in the directories matching the known extensions and moves them to
-    the relevant path in the destination (/path/category/torrent_name).
-
-    :param directory: The directory to process.
-    :param handler: The handler to use.
-    :param torrent_name: The relevant torrent name.
-    """
-    for directory_path, _, file_names in os.walk(directory):
-        logger.info('Processing Directory {}'.format(directory_path))
-        for filename in file_names:
-            process_file(handler, torrent_name, os.path.join(directory_path, filename))
-
-
 def process_directory(directory):
     """
-    Chooses between copying and moving RARs (to conserve the original torrent files).
+    The main directory processing function.
+    It searches for files in the directories matching the known extensions and moves/copies them to
+    the relevant path in the destination (/path/category/torrent_name).
 
     :param directory: The directory to process.
     """
     torrent_name = os.path.basename(os.path.dirname(directory))
     logger.info('Processing directory {} for torrent {}'.format(directory, torrent_name))
-    # If directory has extracted RARs.
-    directories_list = os.listdir(directory)
-    if config.EXTRACTION_TEMP_DIR_NAME in directories_list:
-        _handle_directory(os.path.join(directory, config.EXTRACTION_TEMP_DIR_NAME), shutil.move, torrent_name)
-    # If directory has content only.
-    else:
-        _handle_directory(directory, shutil.move, torrent_name)
+    for directory_path, _, file_names in os.walk(directory):
+        logger.info('Processing Directory {}'.format(directory_path))
+        for filename in file_names:
+            process_file(torrent_name, os.path.join(directory_path, filename))
