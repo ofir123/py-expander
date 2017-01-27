@@ -16,9 +16,9 @@ def _sync():
     """
     Perform sync action.
     """
-    process = subprocess.run('{} sync'.format(config.ACD_CLI_PATH), shell=True)
-    if process.returncode != 0:
-        logger.error('Bad return code ({}) for sync'.format(process.returncode))
+    return_code = subprocess.call('{} sync'.format(config.ACD_CLI_PATH), shell=True)
+    if return_code != 0:
+        logger.error('Bad return code ({}) for sync'.format(return_code))
     else:
         logger.info('Sync succeeded!')
 
@@ -39,11 +39,10 @@ def _encrypt(encrypted_dir, plain_dir):
         os.environ[config.ENCFS_ENVIRONMENT_VARIABLE] = config.ENCFS_CONFIG_PATH
     # Encrypt!
     os.makedirs(encrypted_dir)
-    encryption_process = subprocess.run('echo {} | {} -S "{}" "{}"'.format(
+    return_code = subprocess.call('echo {} | {} -S "{}" "{}"'.format(
         config.ENCFS_PASSWORD, config.ENCFS_PATH, encrypted_dir, plain_dir), shell=True)
-    encryption_return_code = encryption_process.returncode
-    if encryption_return_code != 0:
-        logger.error('Bad return code ({}) for encryption. Stopping!'.format(encryption_return_code))
+    if return_code != 0:
+        logger.error('Bad return code ({}) for encryption. Stopping!'.format(return_code))
         return False
     return True
 
@@ -140,11 +139,10 @@ def upload_file(file_path):
         while return_code != 0 and upload_tries < config.MAX_UPLOAD_TRIES:
             logger.info('Uploading file...')
             upload_tries += 1
-            process = subprocess.run('{} upload "{}" /'.format(config.ACD_CLI_PATH, upload_base_dir), shell=True)
+            return_code = subprocess.call('{} upload "{}" /'.format(config.ACD_CLI_PATH, upload_base_dir), shell=True)
             # Check results.
-            return_code = process.returncode
             if return_code != 0:
-                logger.error('Bad return code ({}) for file: {}'.format(process.returncode, cloud_file))
+                logger.error('Bad return code ({}) for file: {}'.format(return_code, cloud_file))
                 if upload_tries < config.MAX_UPLOAD_TRIES:
                     logger.info('Trying again!')
                     # Sync in case the file was actually uploaded.
@@ -163,7 +161,7 @@ def upload_file(file_path):
             os.rename(os.path.join(original_dir, cloud_file), file_path)
         # Unmount ENCFS directory.
         if config.SHOULD_ENCRYPT:
-            subprocess.run('{} -u "{}"'.format(config.FUSERMOUNT_PATH, plain_base_dir), shell=True)
+            subprocess.call('{} -u "{}"'.format(config.FUSERMOUNT_PATH, plain_base_dir), shell=True)
         # Delete all temporary directories.
         shutil.rmtree(base_dir)
     else:
