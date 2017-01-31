@@ -1,5 +1,6 @@
 import errno
 import os
+import shutil
 import subprocess
 
 import logbook
@@ -34,14 +35,14 @@ def process_file(torrent_name, file_path):
     :param torrent_name: The relevant torrent name.
     :param file_path: The file path to process.
     """
-    handler = config.FILE_HANDLER
+    handler = shutil.move if config.SHOULD_DELETE else shutil.copyfile
     filename = os.path.basename(file_path)
     destination_dir = os.path.join(config.DATA_PATH, torrent_name)
     # Creates target directory (of category path).
     _create_destination_path(destination_dir)
     destination_path = os.path.join(destination_dir, filename)
     try:
-        # Move\Copy all relevant files to their location (keep original files for uploading).
+        # Move/Copy all relevant files to their location (keep original files for uploading).
         handler(file_path, destination_path)
         logger.info('{} {} to {}'.format(handler.__name__, file_path, destination_path))
         if os.name != 'nt':
