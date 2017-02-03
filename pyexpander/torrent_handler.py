@@ -53,8 +53,9 @@ def expand_torrent(torrent_path):
             process_file(new_path)
         else:
             extract_all(new_path)
-            process_directory(new_path)
-            cleanup(new_path)
+            # Perform cleanup only if at least one file was processed successfully. Otherwise, there was a problem.
+            if process_directory(new_path) > 0:
+                cleanup(new_path)
     except OSError as ex:
         logger.exception('Failed to {} {}: {}'.format(handler.__name__, torrent_path, ex))
     logger.info('Done!')

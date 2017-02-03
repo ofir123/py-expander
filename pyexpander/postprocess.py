@@ -14,6 +14,7 @@ def process_file(file_path):
     Processes a single file.
 
     :param file_path: The file path to process.
+    :return: True if file processing was successful, and False otherwise.
     """
     # Get subtitles.
     subtitles_paths = None
@@ -21,10 +22,11 @@ def process_file(file_path):
         subtitles_paths = find_file_subtitles(file_path)
     # Upload files to Amazon.
     if config.SHOULD_UPLOAD:
-        upload_file(file_path)
         if subtitles_paths:
             for subtitles_path in subtitles_paths:
                 upload_file(subtitles_path)
+        return upload_file(file_path)
+    return True
 
 
 def process_directory(directory):
@@ -34,9 +36,13 @@ def process_directory(directory):
     the relevant path in the destination (/path/category/torrent_name).
 
     :param directory: The directory to process.
+    :return: The number of successfully processed files.
     """
     logger.info('Processing directory {}'.format(directory))
+    successful_files = 0
     for directory_path, _, file_names in os.walk(directory):
         logger.info('Processing Directory {}'.format(directory_path))
         for filename in file_names:
-            process_file(os.path.join(directory_path, filename))
+            if process_file(os.path.join(directory_path, filename)):
+                successful_files += 1
+    return successful_files

@@ -52,6 +52,7 @@ def upload_file(file_path):
     Upload the given file to its proper Amazon cloud directory.
 
     :param: file_path: The file to upload.
+    :return: True if the file was upload successfully, and False otherwise.
     """
     logger.info('Uploading file: {}'.format(file_path))
     fixed_file_path = file_path
@@ -59,15 +60,15 @@ def upload_file(file_path):
     # Verify file name.
     if len(file_parts) != 2:
         logger.info('File has no extension! Skipping...')
-        return
+        return False
     file_name, file_extension = file_parts
     if file_extension not in config.EXTENSIONS_WHITE_LIST:
         logger.info('File extension is not in white list! Skipping...')
-        return
+        return False
     for black_list_word in config.NAMES_BLACK_LIST:
         if black_list_word in file_name.lower():
             logger.info('File name contains a black listed word ({})! Skipping...'.format(black_list_word))
-            return
+            return False
     language_extension = None
     is_subtitles = file_extension in config.SUBTITLES_EXTENSIONS
     # Fake extension for subtitles in order to help guessit.
@@ -124,7 +125,7 @@ def upload_file(file_path):
             if not encryption_successful:
                 # Delete directories and stop.
                 shutil.rmtree(base_dir)
-                return
+                return False
             # Upload the encrypted directory tree instead of the plain one.
             upload_base_dir = encrypted_base_dir
         logger.info('Moving file to temporary path: {}'.format(cloud_temp_path))
@@ -152,10 +153,12 @@ def upload_file(file_path):
                     logger.error('Max retries with no success! Skipping...')
         # If everything went smoothly, add the file name to the original names log.
         if return_code == 0:
+            upload_succeeded = True
             logger.info('Upload succeeded! Deleting original file...')
             if not is_subtitles:
                 open(config.ORIGINAL_NAMES_LOG, 'a', encoding='UTF-8').write(file_path + '\n')
         else:
+            upload_succeeded = False
             # Reverse everything.
             logger.info('Upload failed! Reversing all changes...')
             shutil.move(final_file_path, original_dir)
@@ -165,5 +168,7 @@ def upload_file(file_path):
             subprocess.call('{} -u "{}"'.format(config.FUSERMOUNT_PATH, plain_base_dir), shell=True)
         # Delete all temporary directories.
         shutil.rmtree(base_dir)
+        return upload_succeeded
     else:
         logger.info('Couldn\'t guess file info. Skipping...')
+        return False
