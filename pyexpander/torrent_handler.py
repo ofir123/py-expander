@@ -1,5 +1,7 @@
 #!/usr/local/bin/python3.5
 import os
+import shutil
+import subprocess
 import sys
 
 import logbook
@@ -34,15 +36,27 @@ def expand_torrent(torrent_path):
     """
     logger.info('Processing torrent {}'.format(torrent_path))
     torrent_path = os.path.abspath(torrent_path)
-
-    if os.path.isdir(torrent_path):
-        # Make sure the path ends with a separator.
-        torrent_path = os.path.join(torrent_path, '')
-        extract_all(torrent_path)
-        process_directory(torrent_path)
-        cleanup(torrent_path)
-    else:
-        process_file(os.path.splitext(os.path.basename(torrent_path))[0], torrent_path)
+    is_file = os.path.isfile(torrent_path)
+    # Move/Copy all relevant files to their location (keep original files for uploading).
+    handler = shutil.move
+    if not config.SHOULD_DELETE:
+        handler = shutil.copy if is_file else shutil.copytree
+    new_path = os.path.join(config.DATA_PATH, os.path.basename(torrent_path))
+    logger.info('{} {} to {}'.format(handler.__name__, torrent_path, new_path))
+    try:
+        handler(torrent_path, new_path)
+        # Set relevant permissions.
+        if os.name != 'nt':
+            subprocess.check_output(['chmod', config.EXTRACTION_FILES_MASK, '-R', new_path])
+        # Handle new path.
+        if is_file:
+            process_file(new_path)
+        else:
+            extract_all(new_path)
+            process_directory(new_path)
+            cleanup(new_path)
+    except OSError as ex:
+        logger.exception('Failed to {} {}: {}'.format(handler.__name__, torrent_path, ex))
     logger.info('Done!')
 
 

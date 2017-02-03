@@ -139,7 +139,8 @@ def upload_file(file_path):
         while return_code != 0 and upload_tries < config.MAX_UPLOAD_TRIES:
             logger.info('Uploading file...')
             upload_tries += 1
-            return_code = subprocess.call('{} upload "{}" /'.format(config.ACD_CLI_PATH, upload_base_dir), shell=True)
+            return_code = subprocess.call('{} upload -o "{}" /'.format(config.ACD_CLI_PATH, upload_base_dir),
+                                          shell=True)
             # Check results.
             if return_code != 0:
                 logger.error('Bad return code ({}) for file: {}'.format(return_code, cloud_file))
