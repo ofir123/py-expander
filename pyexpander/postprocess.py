@@ -42,7 +42,12 @@ def process_directory(directory):
     successful_files = 0
     for directory_path, _, file_names in os.walk(directory):
         logger.info('Processing Directory {}'.format(directory_path))
-        for filename in file_names:
-            if process_file(os.path.join(directory_path, filename)):
-                successful_files += 1
+        # Process subtitles last, since videos will search for them.
+        sorted_file_names = sorted(file_names, key=lambda f: os.path.splitext(f)[1] in config.SUBTITLES_EXTENSIONS)
+        for filename in sorted_file_names:
+            file_path = os.path.join(directory_path, filename)
+            # Old files might be removed by previous processing.
+            if os.path.exists(file_path):
+                if process_file(file_path):
+                    successful_files += 1
     return successful_files
