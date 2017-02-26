@@ -24,7 +24,8 @@ def _get_log_handlers():
     return [
         logbook.NullHandler(),
         logbook.StreamHandler(sys.stdout, level=logbook.DEBUG, bubble=True),
-        logbook.RotatingFileHandler(config.LOGFILE, level=logbook.DEBUG, max_size=5 * 1024 * 1024, bubble=True)
+        logbook.RotatingFileHandler(config.LOGFILE, level=logbook.DEBUG, max_size=5 * 1024 * 1024, backup_count=1,
+                                    bubble=True)
     ]
 
 
