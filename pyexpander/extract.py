@@ -116,12 +116,18 @@ def extract_all(directory):
 
 def cleanup(directory):
     """
-    This function deletes the original directory once everything has been uploaded.
+    This function searches for the subdirectory created for extraction and deletes it.
+    We avoid deleting the entire directory because some files might have failed uploading.
 
     :param directory: The directory to clean.
     """
-    logger.info('Cleaning up directory {}...'.format(directory))
-    try:
-        shutil.rmtree(directory)
-    except OSError:
-        logger.exception('Failed to delete directory {}!'.format(directory))
+    logger.info('Cleaning up...')
+    listdir = os.listdir(directory)
+
+    if config.EXTRACTION_TEMP_DIR_NAME in listdir:
+        try:
+            logger.info('Going to delete {}'.format(os.path.join(directory, config.EXTRACTION_TEMP_DIR_NAME)))
+            shutil.rmtree(os.path.join(directory, config.EXTRACTION_TEMP_DIR_NAME))
+        except OSError:
+            logger.exception('Failed to delete directory {}!'.format(os.path.join(
+                directory, config.EXTRACTION_TEMP_DIR_NAME)))
