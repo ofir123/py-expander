@@ -94,7 +94,7 @@ def upload_file(file_path):
         title = title.title()
     if video_type == 'episode' and title:
         # Translate show title if needed.
-        if title in SHOWS_MAP:
+        if title.lower() in SHOWS_MAP:
             title = SHOWS_MAP[title.lower()]
         season = guess_results.get('season')
         if season:
