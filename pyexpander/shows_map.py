@@ -1,4 +1,5 @@
 SHOWS_MAP = {
+    '24 legacy': '24 - Legacy',
     'abstract': 'Abstract - The Art Of Design',
     'abstract the art of design': 'Abstract - The Art Of Design',
     'american dad!': 'American Dad',
@@ -7,6 +8,7 @@ SHOWS_MAP = {
     'avatar': 'Avatar - The Last Airbender',
     'avatar the last airbender': 'Avatar - The Last Airbender',
     'battlestar galactica': 'Battlestar Galactica (2003)',
+    'the blacklist redemption': 'The Blacklist - Redemption',
     'the bridge': 'The Bridge (2011)',
     'brooklyn nine nine': 'Brooklyn Nine-Nine',
     'buffy': 'Buffy - The Vampire Slayer',
