@@ -32,6 +32,7 @@ SHOWS_MAP = {
     'empire': 'Empire (2015)',
     'the flash': 'The Flash (2014)',
     'flashforward': 'FlashForward',
+    'the fosters': 'The Fosters (2013)',
     'the fresh prince of bel air': 'The Fresh Prince Of Bel-Air',
     'fullmetal alchemist brotherhood': 'Fullmetal Alchemist - Brotherhood',
     'gilmore girls a year in the life': 'Gilmore Girls - A Year In The Life',
