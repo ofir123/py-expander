@@ -20,7 +20,9 @@ Currently only 7-Zip is supported. (Make sure to use the version with the rar pl
 
 Usage
 ===========
-Install the script as follows:
+First of all, install the shows-formatter package (from my GitHub repository).
+
+Then, Install the script as follows:
 
 	$ python setup.py develop
 

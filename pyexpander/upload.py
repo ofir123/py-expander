@@ -6,9 +6,9 @@ import string
 
 import logbook
 from guessit import guessit
+from showsformatter import format_show
 
 from . import config
-from .shows_map import SHOWS_MAP
 
 logger = logbook.Logger('uploader')
 
@@ -89,13 +89,9 @@ def upload_file(file_path):
     guess_results = guessit(os.path.basename(fixed_file_path))
     video_type = guess_results.get('type')
     title = guess_results.get('title')
-    # Make sure every word starts with a capital letter.
-    if title:
-        title = title.title()
     if video_type == 'episode' and title:
         # Translate show title if needed.
-        if title.lower() in SHOWS_MAP:
-            title = SHOWS_MAP[title.lower()]
+        title = format_show(title)
         season = guess_results.get('season')
         if season:
             episode = guess_results.get('episode')
@@ -103,6 +99,8 @@ def upload_file(file_path):
                 cloud_dir = '{}/{}/Season {:02d}'.format(config.CLOUD_TV_PATH, title, season)
                 cloud_file = '{} - S{:02d}E{:02d}'.format(title, season, episode)
     elif video_type == 'movie' and title:
+        # Make sure every word starts with a capital letter.
+        title = title.title()
         year = guess_results.get('year')
         if year:
             cloud_dir = '{}/{} ({})'.format(config.CLOUD_MOVIE_PATH, title, year)
