@@ -46,5 +46,5 @@ ENCFS_CONFIG_PATH = '/encfs6/config/path.xml'
 ENCFS_PASSWORD = 'Password1'
 
 # Lists.
-EXTENSIONS_WHITE_LIST = ['.srt', '.mkv', '.avi', '.mp4', '.mov', '.m4v', '.wmv', 'mpg']
+EXTENSIONS_WHITE_LIST = ['.srt', '.mkv', '.avi', '.mp4', '.mov', '.m4v', '.wmv', '.mpg']
 NAMES_BLACK_LIST = ['sample']
