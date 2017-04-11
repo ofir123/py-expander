@@ -34,7 +34,7 @@ def find_file_subtitles(path):
             if not language_extension:
                 language_extension = DEFAULT_LANGUAGE_EXTENSION
             if file_name == video_name and language_extension in LANGUAGE_EXTENSIONS:
-                language = babelfish.Language.fromalpha2(language_extension)
+                language = babelfish.Language.fromalpha2(language_extension.strip('.'))
                 if language in languages_map:
                     subtitles_path = os.path.join(os.path.dirname(path), file_name + file_extension)
                     languages_map.pop(language)
