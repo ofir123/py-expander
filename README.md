@@ -12,7 +12,7 @@ The script relies on the 'guessit' package to detect movies/tv downloads.
 Original torrent files are conserved for upload.
 
 The script can also fetch subtitles in chosen languages (change in the config file),  
-and upload the videos to an Amazon cloud storage account.
+and upload the videos to a Google Drive account.
 
 All original torrent names are kept the original names log file.
 

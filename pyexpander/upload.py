@@ -13,17 +13,6 @@ from . import config
 logger = logbook.Logger('uploader')
 
 
-def _sync():
-    """
-    Perform sync action.
-    """
-    return_code = subprocess.call('{} sync'.format(config.ACD_CLI_PATH), shell=True)
-    if return_code != 0:
-        logger.error('Bad return code ({}) for sync'.format(return_code))
-    else:
-        logger.info('Sync succeeded!')
-
-
 def _encrypt(encrypted_dir, plain_dir):
     """
     Encrypt the given plain directory.
@@ -50,7 +39,7 @@ def _encrypt(encrypted_dir, plain_dir):
 
 def upload_file(file_path):
     """
-    Upload the given file to its proper Amazon cloud directory.
+    Upload the given file to its proper Google Drive directory.
 
     :param: file_path: The file to upload.
     :return: True if the file was upload successfully, and False otherwise.
@@ -130,27 +119,24 @@ def upload_file(file_path):
                 return False
             # Upload the encrypted directory tree instead of the plain one.
             upload_base_dir = encrypted_base_dir
+        gdrive_dir = upload_base_dir.split(base_dir)[1].strip('/')
         logger.info('Moving file to temporary path: {}'.format(cloud_temp_path))
         os.makedirs(cloud_temp_path)
         shutil.move(file_path, cloud_temp_path)
         os.rename(os.path.join(cloud_temp_path, os.path.basename(file_path)), final_file_path)
-        # Sync first.
-        _sync()
         # Upload!
         upload_tries = 0
         return_code = 1
         while return_code != 0 and upload_tries < config.MAX_UPLOAD_TRIES:
             logger.info('Uploading file...')
             upload_tries += 1
-            return_code = subprocess.call('{} upload -o "{}" /'.format(config.ACD_CLI_PATH, upload_base_dir),
-                                          shell=True)
+            return_code = subprocess.call('{} copyto "{}" "GDrive:{}"'.format(
+                config.RCLONE_PATH, upload_base_dir, gdrive_dir), shell=True)
             # Check results.
             if return_code != 0:
                 logger.error('Bad return code ({}) for file: {}'.format(return_code, cloud_file))
                 if upload_tries < config.MAX_UPLOAD_TRIES:
                     logger.info('Trying again!')
-                    # Sync in case the file was actually uploaded.
-                    _sync()
                 else:
                     logger.error('Max retries with no success! Skipping...')
         # If everything went smoothly, add the file name to the original names log.
