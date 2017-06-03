@@ -130,8 +130,8 @@ def upload_file(file_path):
         while return_code != 0 and upload_tries < config.MAX_UPLOAD_TRIES:
             logger.info('Uploading file...')
             upload_tries += 1
-            return_code = subprocess.call('{} copyto "{}" "GDrive:{}"'.format(
-                config.RCLONE_PATH, upload_base_dir, gdrive_dir), shell=True)
+            return_code = subprocess.call('{} --config {} copyto "{}" "GDrive:{}"'.format(
+                config.RCLONE_PATH, config.RCLONE_CONFIG_PATH, upload_base_dir, gdrive_dir), shell=True)
             # Check results.
             if return_code != 0:
                 logger.error('Bad return code ({}) for file: {}'.format(return_code, cloud_file))
