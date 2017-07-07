@@ -86,7 +86,11 @@ def upload_file(file_path):
             episode = guess_results.get('episode')
             if episode:
                 cloud_dir = '{}/{}/Season {:02d}'.format(config.CLOUD_TV_PATH, title, season)
-                cloud_file = '{} - S{:02d}E{:02d}'.format(title, season, episode)
+                if isinstance(episode, list):
+                    episode_str = 'E{:02d}-E{:02d}'.format(episode[0], episode[-1])
+                else:
+                    episode_str = 'E{:02d}'.format(episode)
+                cloud_file = '{} - S{:02d}{}'.format(title, season, episode_str)
     elif video_type == 'movie' and title:
         # Make sure every word starts with a capital letter.
         title = title.title()
