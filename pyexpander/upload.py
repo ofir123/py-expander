@@ -78,6 +78,8 @@ def upload_file(file_path):
     guess_results = guessit(os.path.basename(fixed_file_path))
     video_type = guess_results.get('type')
     title = guess_results.get('title')
+    if isinstance(title, list):
+        title = title[0]
     if video_type == 'episode' and title:
         # Translate show title if needed.
         title = format_show(title)
