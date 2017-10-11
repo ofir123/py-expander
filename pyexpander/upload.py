@@ -75,7 +75,12 @@ def upload_file(file_path):
     # Create cloud path based on guessit results.
     cloud_dir = None
     cloud_file = None
-    guess_results = guessit(os.path.basename(fixed_file_path))
+    fixed_file_name = os.path.basename(fixed_file_path)
+    # Remove brackets group name prefix.
+    if fixed_file_name.startswith('[') and ']' in fixed_file_name:
+        fixed_file_name = fixed_file_name.split(']', 1)[1]
+    # Start guessing!
+    guess_results = guessit(fixed_file_name)
     video_type = guess_results.get('type')
     title = guess_results.get('title')
     if isinstance(title, list):
@@ -87,7 +92,9 @@ def upload_file(file_path):
         if season:
             episode = guess_results.get('episode')
             if episode:
-                cloud_dir = '{}/{}/Season {:02d}'.format(config.CLOUD_TV_PATH, title, season)
+                # Dirs that end with . are evil!
+                fixed_dir_name = title.rstrip('.')
+                cloud_dir = '{}/{}/Season {:02d}'.format(config.CLOUD_TV_PATH, fixed_dir_name, season)
                 if isinstance(episode, list):
                     episode_str = 'E{:02d}-E{:02d}'.format(episode[0], episode[-1])
                 else:
