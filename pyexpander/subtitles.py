@@ -9,7 +9,8 @@ from subliminal.cache import region
 from subliminal.cli import dirs, cache_file, MutexLock
 from subliminal.subtitle import get_subtitle_path
 
-from .config import LANGUAGES_MAP, LANGUAGE_EXTENSIONS, SUBTITLES_EXTENSIONS, DEFAULT_LANGUAGE_EXTENSION
+from .config import LANGUAGES_MAP, PROVIDER_CONFIGS, LANGUAGE_EXTENSIONS, SUBTITLES_EXTENSIONS, \
+    DEFAULT_LANGUAGE_EXTENSION
 
 logger = logbook.Logger('subtitles')
 
@@ -55,12 +56,13 @@ def find_file_subtitles(path):
                 other_languages.append(language)
             else:
                 current_result = subliminal.download_best_subtitles(
-                    {video}, languages={language}, providers=providers).values()
+                    {video}, languages={language}, providers=providers, provider_configs=PROVIDER_CONFIGS).values()
                 if len(current_result) > 0:
                     subtitle_results.extend(list(current_result)[0])
         # Download all other languages.
         for language in other_languages:
-            current_result = subliminal.download_best_subtitles({video}, languages={language}).values()
+            current_result = subliminal.download_best_subtitles(
+                {video}, languages={language}, provider_configs=PROVIDER_CONFIGS).values()
             if len(current_result) > 0:
                 subtitle_results.extend(list(current_result)[0])
         # Handle results.

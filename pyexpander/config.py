@@ -23,10 +23,17 @@ EXTRACTION_EXECUTABLE = '7z'
 
 # Subtitle settings.
 SHOULD_FIND_SUBTITLES = True
-# A map between each language and its favorite subliminal providers (None for all providers).
+# A map between each language and its favorite Subliminal providers (None for all providers).
 LANGUAGES_MAP = {
-    babelfish.Language('heb'): ['thewiz', 'subscenter'],
+    babelfish.Language('heb'): ['cinemast', 'wizdom'],
     babelfish.Language('eng'): []
+}
+# A map between each provider and its credentials.
+PROVIDER_CONFIGS = {
+    'cinemast': {
+        'username': 'subliminal@gmail.com',
+        'password': 'subliminal'
+    }
 }
 
 # Upload settings.
