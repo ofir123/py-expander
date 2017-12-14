@@ -89,12 +89,13 @@ def upload_file(file_path):
         # Translate show title if needed.
         title = format_show(title)
         season = guess_results.get('season')
-        if season:
+        # Skip rare cases of weird episodes names.
+        if season and not isinstance(season, list):
             episode = guess_results.get('episode')
             if episode:
                 # Dirs that end with . are evil!
                 fixed_dir_name = title.rstrip('.')
-                cloud_dir = '{}/{}/Season {:02d}'.format(config.CLOUD_TV_PATH, fixed_dir_name, season)
+                cloud_dir = os.path.join(config.CLOUD_TV_PATH, fixed_dir_name, 'Season {:02d}'.format(season))
                 if isinstance(episode, list):
                     episode_str = 'E{:02d}-E{:02d}'.format(episode[0], episode[-1])
                 else:
@@ -105,7 +106,7 @@ def upload_file(file_path):
         title = title.title()
         year = guess_results.get('year')
         if year:
-            cloud_dir = '{}/{} ({})'.format(config.CLOUD_MOVIE_PATH, title, year)
+            cloud_dir = os.path.join(config.CLOUD_MOVIE_PATH, '{} ({})'.format(title, year))
             cloud_file = '{} ({})'.format(title, year)
     if cloud_dir and cloud_file:
         if language_extension:
@@ -132,7 +133,7 @@ def upload_file(file_path):
                 return False
             # Upload the encrypted directory tree instead of the plain one.
             upload_base_dir = encrypted_base_dir
-        gdrive_dir = upload_base_dir.split(base_dir)[1].strip('/')
+        gdrive_dir = upload_base_dir.split(base_dir)[1].strip(os.path.sep)
         logger.info('Moving file to temporary path: {}'.format(cloud_temp_path))
         os.makedirs(cloud_temp_path)
         shutil.move(file_path, cloud_temp_path)
