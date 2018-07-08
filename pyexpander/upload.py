@@ -37,50 +37,62 @@ def _encrypt(encrypted_dir, plain_dir):
     return True
 
 
-def upload_file(file_path):
+def _extract_ufc_path(file_name):
     """
-    Upload the given file to its proper Google Drive directory.
+    Extract UFC cloud dir and cloud file name from the given file name.
 
-    :param: file_path: The file to upload.
-    :return: True if the file was upload successfully, and False otherwise.
+    :param file_name: The file name to extract data from.
+    :return: A tuple of format (cloud_dir, cloud_file)
     """
-    logger.info('Uploading file: {}'.format(file_path))
-    fixed_file_path = file_path
-    file_parts = os.path.splitext(file_path)
-    # Verify file name.
-    if len(file_parts) != 2:
-        logger.info('File has no extension! Skipping...')
+    guess_results = guessit(file_name)
+
+    # Get real episode number.
+    episode_num = guess_results.get('episode')
+    if not episode_num:
         return False
-    file_name, file_extension = file_parts
-    if file_extension not in config.EXTENSIONS_WHITE_LIST:
-        logger.info('File extension is not in white list! Skipping...')
-        return False
-    for black_list_word in config.NAMES_BLACK_LIST:
-        if black_list_word in file_name.lower():
-            logger.info('File name contains a black listed word ({})! Skipping...'.format(black_list_word))
-            return False
-    language_extension = None
-    is_subtitles = file_extension in config.SUBTITLES_EXTENSIONS
-    # Fake extension for subtitles in order to help guessit.
-    if is_subtitles:
-        # Remove language extensions if needed.
-        file_parts = os.path.splitext(file_name)
-        if len(file_parts) == 2:
-            fixed_file_name, language_extension = file_parts
-            if language_extension in config.LANGUAGE_EXTENSIONS:
-                fixed_file_path = fixed_file_name + config.DEFAULT_VIDEO_EXTENSION
-            else:
-                language_extension = config.DEFAULT_LANGUAGE_EXTENSION
-                fixed_file_path = file_name + config.DEFAULT_VIDEO_EXTENSION
-    # Create cloud path based on guessit results.
+    season = guess_results.get('season')
+    if season:
+        episode_num += 100 * season
+
+    # Get title.
+    lowercase_file_name = file_name.lower()
+    if 'fight' in lowercase_file_name and 'night' in lowercase_file_name:
+        title = 'UFC Fight Night'
+    elif 'fox' in lowercase_file_name:
+        title = 'UFC On FOX'
+    else:
+        title = 'UFC'
+
+    cloud_dir = os.path.join(config.CLOUD_UFC_PATH, '{} {}'.format(title, episode_num))
+    cloud_file = '{} {}'.format(title, episode_num)
+    if 'prelim' in file_name:
+        cloud_file += ' - Preliminaries'
+    return cloud_dir, cloud_file
+
+
+def _extract_masterclass_path(file_name):
+    """
+    Extract Masterclass cloud dir and cloud file name from the given file name.
+
+    :param file_name: The file name to extract data from.
+    :return: A tuple of format (cloud_dir, cloud_file)
+    """
+    cloud_dir = config.CLOUD_VIDEOS_PATH
+    cloud_file = os.path.splitext(file_name)[0]
+    return cloud_dir, cloud_file
+
+
+def _guess_path(file_name):
+    """
+    Guess cloud dir and cloud file name from the given file name.
+
+    :param file_name: The file name to guess on.
+    :return: A tuple of format (cloud_dir, cloud_file)
+    """
     cloud_dir = None
     cloud_file = None
-    fixed_file_name = os.path.basename(fixed_file_path)
-    # Remove brackets group name prefix.
-    if fixed_file_name.startswith('[') and ']' in fixed_file_name:
-        fixed_file_name = fixed_file_name.split(']', 1)[1]
     # Start guessing!
-    guess_results = guessit(fixed_file_name)
+    guess_results = guessit(file_name)
     video_type = guess_results.get('type')
     title = guess_results.get('title')
     if isinstance(title, list):
@@ -106,8 +118,62 @@ def upload_file(file_path):
         title = title.title()
         year = guess_results.get('year')
         if year:
-            cloud_dir = os.path.join(config.CLOUD_MOVIE_PATH, '{} ({})'.format(title, year))
+            cloud_dir = os.path.join(config.CLOUD_MOVIES_PATH, '{} ({})'.format(title, year))
             cloud_file = '{} ({})'.format(title, year)
+    return cloud_dir, cloud_file
+
+
+def upload_file(file_path):
+    """
+    Upload the given file to its proper Google Drive directory.
+
+    :param: file_path: The file to upload.
+    :return: True if the file was upload successfully, and False otherwise.
+    """
+    logger.info('Uploading file: {}'.format(file_path))
+    fixed_file_path = file_path
+    file_parts = os.path.splitext(file_path)
+
+    # Verify file name.
+    if len(file_parts) != 2:
+        logger.info('File has no extension! Skipping...')
+        return False
+    file_name, file_extension = file_parts
+    if file_extension not in config.EXTENSIONS_WHITE_LIST:
+        logger.info('File extension is not in white list! Skipping...')
+        return False
+    for black_list_word in config.NAMES_BLACK_LIST:
+        if black_list_word in file_name.lower():
+            logger.info('File name contains a black listed word ({})! Skipping...'.format(black_list_word))
+            return False
+    language_extension = None
+    is_subtitles = file_extension in config.SUBTITLES_EXTENSIONS
+
+    # Fake extension for subtitles in order to help guessit.
+    if is_subtitles:
+        # Remove language extensions if needed.
+        file_parts = os.path.splitext(file_name)
+        if len(file_parts) == 2:
+            fixed_file_name, language_extension = file_parts
+            if language_extension in config.LANGUAGE_EXTENSIONS:
+                fixed_file_path = fixed_file_name + config.DEFAULT_VIDEO_EXTENSION
+            else:
+                language_extension = config.DEFAULT_LANGUAGE_EXTENSION
+                fixed_file_path = file_name + config.DEFAULT_VIDEO_EXTENSION
+
+    # Create cloud path based on guessit results.
+    fixed_file_name = os.path.basename(fixed_file_path)
+    # Remove brackets group name prefix.
+    if fixed_file_name.startswith('[') and ']' in fixed_file_name:
+        fixed_file_name = fixed_file_name.split(']', 1)[1]
+
+    if 'ufc' in fixed_file_name.lower():
+        cloud_dir, cloud_file = _extract_ufc_path(fixed_file_name)
+    elif 'masterclass' in fixed_file_name.lower():
+        cloud_dir, cloud_file = _extract_masterclass_path(fixed_file_name)
+    else:
+        cloud_dir, cloud_file = _guess_path(fixed_file_name)
+
     if cloud_dir and cloud_file:
         if language_extension:
             cloud_file += language_extension
@@ -138,6 +204,7 @@ def upload_file(file_path):
         os.makedirs(cloud_temp_path)
         shutil.move(file_path, cloud_temp_path)
         os.rename(os.path.join(cloud_temp_path, os.path.basename(file_path)), final_file_path)
+
         # Upload!
         upload_tries = 0
         return_code = 1

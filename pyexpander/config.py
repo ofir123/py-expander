@@ -7,7 +7,9 @@ DEFAULT_PATH = '/'
 CLOUD_ENCRYPTED_PATH = 'Encrypted'
 CLOUD_PLAIN_PATH = 'Media'
 CLOUD_TV_PATH = 'TV'
-CLOUD_MOVIE_PATH = 'Movies'
+CLOUD_MOVIES_PATH = 'Movies'
+CLOUD_UFC_PATH = 'UFC'
+CLOUD_VIDEOS_PATH = 'Videos'
 
 # Post-process settings.
 SHOULD_DELETE = True
