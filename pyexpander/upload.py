@@ -65,7 +65,7 @@ def _extract_ufc_path(file_name):
 
     cloud_dir = os.path.join(config.CLOUD_UFC_PATH, '{} {}'.format(title, episode_num))
     cloud_file = '{} {}'.format(title, episode_num)
-    if 'prelim' in file_name:
+    if 'prelim' in lowercase_file_name:
         cloud_file += ' - Preliminaries'
     return cloud_dir, cloud_file
 
