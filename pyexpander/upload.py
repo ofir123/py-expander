@@ -49,7 +49,7 @@ def _extract_ufc_path(file_name):
     # Get real episode number.
     episode_num = guess_results.get('episode')
     if not episode_num:
-        return False
+        return None, None
     season = guess_results.get('season')
     if season:
         episode_num += 100 * season
