@@ -56,10 +56,10 @@ def _extract_ufc_path(file_name):
 
     # Get title.
     lowercase_file_name = file_name.lower()
-    if 'fight' in lowercase_file_name and 'night' in lowercase_file_name:
-        title = 'UFC Fight Night'
-    elif 'fox' in lowercase_file_name:
+    if 'fox' in lowercase_file_name:
         title = 'UFC On FOX'
+    elif 'fight' in lowercase_file_name and 'night' in lowercase_file_name:
+        title = 'UFC Fight Night'
     else:
         title = 'UFC'
 
