@@ -53,6 +53,7 @@ def _extract_ufc_path(file_name):
     season = guess_results.get('season')
     if season:
         episode_num += 100 * season
+    episode_num = '{:03}'.format(episode_num)
 
     # Get title.
     lowercase_file_name = file_name.lower()
