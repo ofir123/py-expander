@@ -140,6 +140,7 @@ def upload_file(file_path):
         logger.info('File has no extension! Skipping...')
         return False
     file_name, file_extension = file_parts
+    file_extension = file_extension.lower()
     if file_extension not in config.EXTENSIONS_WHITE_LIST:
         logger.info('File extension is not in white list! Skipping...')
         return False
