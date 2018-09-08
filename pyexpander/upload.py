@@ -169,9 +169,9 @@ def upload_file(file_path):
     if fixed_file_name.startswith('[') and ']' in fixed_file_name:
         fixed_file_name = fixed_file_name.split(']', 1)[1]
 
-    if 'ufc' in fixed_file_name.lower():
+    if 'ufc' in [fixed_file_name.lower(), fixed_file_path.lower()]:
         cloud_dir, cloud_file = _extract_ufc_path(fixed_file_name)
-    elif 'masterclass' in fixed_file_name.lower():
+    elif 'masterclass' in [fixed_file_name.lower(), fixed_file_path.lower()]:
         cloud_dir, cloud_file = _extract_masterclass_path(fixed_file_name)
     else:
         cloud_dir, cloud_file = _guess_path(fixed_file_name)
