@@ -18,9 +18,9 @@ def process_file(file_path):
     """
     # Get subtitles.
     subtitles_paths = None
-    if config.SHOULD_FIND_SUBTITLES:
+    if config.SHOULD_FIND_SUBTITLES and os.path.splitext(file_path)[-1] not in config.SUBTITLES_EXTENSIONS:
         subtitles_paths = find_file_subtitles(file_path)
-    # Upload files to Amazon.
+    # Upload files to Google Drive.
     if config.SHOULD_UPLOAD:
         if subtitles_paths:
             for subtitles_path in subtitles_paths:
@@ -38,12 +38,11 @@ def process_directory(directory):
     :param directory: The directory to process.
     :return: The number of successfully processed files.
     """
-    logger.info('Processing directory {}'.format(directory))
     successful_files = 0
     for directory_path, _, file_names in os.walk(directory):
-        logger.info('Processing Directory {}'.format(directory_path))
+        logger.info('Processing directory {}'.format(directory_path))
         # Process subtitles last, since videos will search for them.
-        sorted_file_names = sorted(file_names, key=lambda f: os.path.splitext(f)[1] in config.SUBTITLES_EXTENSIONS)
+        sorted_file_names = sorted(file_names, key=lambda f: os.path.splitext(f)[-1] in config.SUBTITLES_EXTENSIONS)
         for filename in sorted_file_names:
             file_path = os.path.join(directory_path, filename)
             # Old files might be removed by previous processing.
