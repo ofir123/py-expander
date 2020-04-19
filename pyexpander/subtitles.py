@@ -15,6 +15,13 @@ from .config import LANGUAGES_MAP, PROVIDER_CONFIGS, LANGUAGE_EXTENSIONS, SUBTIT
 logger = logbook.Logger('subtitles')
 
 
+def _check_hebits_dir(path):
+    for file_name in os.listdir(path):
+        if 'hebits' in file_name.lower():
+            return True
+    return False
+
+
 def find_file_subtitles(path):
     """
     Finds subtitles for the given video file path.
@@ -34,7 +41,7 @@ def find_file_subtitles(path):
             real_file_name, language_extension = os.path.splitext(file_name)
             # Switch empty extension with default one.
             if language_extension not in LANGUAGE_EXTENSIONS:
-                language_extension = DEFAULT_LANGUAGE_EXTENSION
+                language_extension = '.he' if _check_hebits_dir(os.path.dirname(path)) else DEFAULT_LANGUAGE_EXTENSION
                 real_file_name = file_name
             logger.debug('Language extension is now {}'.format(language_extension))
             logger.debug('Comparing {} with {}'.format(real_file_name.lower(), video_name.lower()))
