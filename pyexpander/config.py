@@ -27,7 +27,7 @@ EXTRACTION_EXECUTABLE = '7z'
 SHOULD_FIND_SUBTITLES = True
 # A map between each language and its favorite Subliminal providers (None for all providers).
 LANGUAGES_MAP = {
-    babelfish.Language('heb'): ['cinemast', 'wizdom'],
+    babelfish.Language('heb'): ['wizdom', 'cinemast'],
     babelfish.Language('eng'): []
 }
 # A map between each provider and its credentials.
