@@ -171,6 +171,9 @@ def upload_file(file_path):
     if fixed_file_name.startswith('[') and ']' in fixed_file_name:
         fixed_file_name = fixed_file_name.split(']', 1)[1]
 
+    # Check if dubbed.
+    is_kids = 'hebdub' in fixed_file_name.lower() or 'hebdub' in fixed_file_path.lower()
+
     if 'ufc' in fixed_file_name.lower() or 'ufc' in fixed_file_path.lower():
         cloud_dir, cloud_file = _extract_ufc_path(fixed_file_name)
     elif 'masterclass' in fixed_file_name.lower() or 'masterclass' in fixed_file_path.lower():
@@ -179,8 +182,12 @@ def upload_file(file_path):
         cloud_dir, cloud_file = _guess_path(fixed_file_name)
 
     if cloud_dir and cloud_file:
+        if is_kids:
+            cloud_dir = cloud_dir.replace(config.CLOUD_MOVIES_PATH, config.CLOUD_KIDS_PATH, 1)
+            cloud_file += ' - Hebrew'
         if language_extension:
             cloud_file += language_extension
+
         cloud_file += file_extension
         logger.info('Cloud path: {}'.format(os.path.join(cloud_dir, cloud_file)))
         # Create a temporary random cloud dir structure.
