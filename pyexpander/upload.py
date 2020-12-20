@@ -172,7 +172,8 @@ def upload_file(file_path):
         fixed_file_name = fixed_file_name.split(']', 1)[1]
 
     # Check if dubbed.
-    is_kids = 'hebdub' in fixed_file_name.lower() or 'hebdub' in fixed_file_path.lower()
+    is_kids = 'hebdub' in fixed_file_name.lower() or 'hebdub' in fixed_file_path.lower() or \
+        'hebrew.dubbed' in fixed_file_name.lower() or 'hebrew.dubbed' in fixed_file_path.lower()
 
     if 'ufc' in fixed_file_name.lower() or 'ufc' in fixed_file_path.lower():
         cloud_dir, cloud_file = _extract_ufc_path(fixed_file_name)
