@@ -31,6 +31,7 @@ def _get_log_handlers():
 
 
 def _recreate_empty_torrent(current_path, recreate_path, is_file):
+    logger.debug("Recreating empty torrent...")
     if is_file:
         Path(recreate_path).touch()
     else:
@@ -53,7 +54,7 @@ def expand_torrent(torrent_path):
     is_file = os.path.isfile(torrent_path)
     # Move/Copy all relevant files to their location (keep original files for uploading).
     handler = shutil.move
-    if not config.SHOULD_DELETE:
+    if not config.SHOULD_DELETE and not config.SHOULD_WIPE_CONTENT:
         handler = shutil.copy if is_file else shutil.copytree
     new_path = os.path.join(config.DATA_PATH, os.path.basename(torrent_path))
     logger.info('{} {} to {}'.format(handler.__name__, torrent_path, new_path))
