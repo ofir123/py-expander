@@ -37,6 +37,7 @@ def _recreate_empty_torrent(current_path, recreate_path, is_file):
     else:
         for dir_path, dir_names, file_names in os.walk(current_path):
             base_path = dir_path.replace(current_path, recreate_path)
+            os.makedirs(base_path)
             for dir_name in dir_names:
                 os.makedirs(os.path.join(base_path, dir_name))
             for file_name in file_names:
