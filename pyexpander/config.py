@@ -13,7 +13,8 @@ CLOUD_UFC_PATH = 'UFC'
 CLOUD_VIDEOS_PATH = 'Videos'
 
 # Post-process settings.
-SHOULD_DELETE = True
+SHOULD_WIPE_CONTENT = True
+SHOULD_DELETE = False
 
 # Log settings.
 LOGFILE = '/var/log/pyexp.log'

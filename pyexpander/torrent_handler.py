@@ -1,5 +1,6 @@
 #!/usr/local/bin/python3.5
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,18 @@ def _get_log_handlers():
     ]
 
 
+def _recreate_empty_torrent(current_path, recreate_path, is_file):
+    if is_file:
+        Path(recreate_path).touch()
+    else:
+        for dir_path, dir_names, file_names in os.walk(current_path):
+            base_path = dir_path.replace(current_path, recreate_path)
+            for dir_name in dir_names:
+                os.makedirs(os.path.join(base_path, dir_name))
+            for file_name in file_names:
+                Path(os.path.join(base_path, file_name)).touch()
+
+
 def expand_torrent(torrent_path):
     """
     Perform torrent expansion steps - extraction, copying/moving to relevant directory and cleanup.
@@ -46,6 +59,10 @@ def expand_torrent(torrent_path):
     logger.info('{} {} to {}'.format(handler.__name__, torrent_path, new_path))
     try:
         handler(torrent_path, new_path)
+        # Leave an empty file if requested, to avoid hit & runs.
+        if not config.SHOULD_DELETE and config.SHOULD_WIPE_CONTENT:
+            _recreate_empty_torrent(new_path, torrent_path, is_file=is_file)
+
         # Set relevant permissions.
         if os.name != 'nt':
             subprocess.check_output(['chmod', config.EXTRACTION_FILES_MASK, '-R', new_path])
