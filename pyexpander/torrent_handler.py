@@ -1,6 +1,5 @@
 #!/usr/local/bin/python3.5
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -33,15 +32,15 @@ def _get_log_handlers():
 def _recreate_empty_torrent(current_path, recreate_path, is_file):
     logger.debug("Recreating empty torrent...")
     if is_file:
-        Path(recreate_path).touch()
+        open(recreate_path, "wb").truncate()
     else:
         for dir_path, dir_names, file_names in os.walk(current_path):
             base_path = dir_path.replace(current_path, recreate_path)
-            os.makedirs(base_path)
+            os.makedirs(base_path, exist_ok=True)
             for dir_name in dir_names:
-                os.makedirs(os.path.join(base_path, dir_name))
+                os.makedirs(os.path.join(base_path, dir_name), exist_ok=True)
             for file_name in file_names:
-                Path(os.path.join(base_path, file_name)).touch()
+                open(os.path.join(base_path, file_name), "wb").truncate()
 
 
 def expand_torrent(torrent_path):
@@ -53,6 +52,11 @@ def expand_torrent(torrent_path):
     logger.info('Processing torrent {}'.format(torrent_path))
     torrent_path = os.path.abspath(torrent_path)
     is_file = os.path.isfile(torrent_path)
+
+    # If upload was finished in the past, recreate and skip upload.
+    if torrent_path.startswith(config.FINISHED_UPLOAD_PREFIX):
+        _recreate_empty_torrent(torrent_path, torrent_path, is_file)
+
     # Move/Copy all relevant files to their location (keep original files for uploading).
     handler = shutil.move
     if not config.SHOULD_DELETE and not config.SHOULD_WIPE_CONTENT:

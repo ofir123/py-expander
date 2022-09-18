@@ -15,6 +15,7 @@ CLOUD_VIDEOS_PATH = 'Videos'
 # Post-process settings.
 SHOULD_WIPE_CONTENT = True
 SHOULD_DELETE = False
+FINISHED_UPLOAD_PREFIX = 'ZZ '
 
 # Log settings.
 LOGFILE = '/var/log/pyexp.log'
