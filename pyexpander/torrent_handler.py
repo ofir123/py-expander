@@ -56,6 +56,8 @@ def expand_torrent(torrent_path):
     # If upload was finished in the past, recreate and skip upload.
     if torrent_path.startswith(config.FINISHED_UPLOAD_PREFIX):
         _recreate_empty_torrent(torrent_path, torrent_path, is_file)
+        logger.info('File was uploaded in the past. Skipping!')
+        return
 
     # Move/Copy all relevant files to their location (keep original files for uploading).
     handler = shutil.move
