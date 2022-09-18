@@ -54,7 +54,7 @@ def expand_torrent(torrent_path):
     is_file = os.path.isfile(torrent_path)
 
     # If upload was finished in the past, recreate and skip upload.
-    if torrent_path.startswith(config.FINISHED_UPLOAD_PREFIX):
+    if os.path.basename(torrent_path).startswith(config.FINISHED_UPLOAD_PREFIX):
         _recreate_empty_torrent(torrent_path, torrent_path, is_file)
         logger.info('File was uploaded in the past. Skipping!')
         return
