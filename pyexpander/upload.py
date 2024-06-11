@@ -185,7 +185,7 @@ def upload_file(file_path):
 
     if cloud_dir and cloud_file:
         if is_kids:
-            cloud_dir = cloud_dir.replace(config.CLOUD_MOVIES_PATH, config.CLOUD_KIDS_PATH, 1)
+            cloud_dir = cloud_dir.replace(config.CLOUD_MOVIES_PATH, config.CLOUD_KIDS_MOVIES_PATH, 1).replace(config.CLOUD_TV_PATH, config.CLOUD_KIDS_TV_PATH, 1)
             cloud_file += ' - Hebrew'
         if language_extension:
             cloud_file += language_extension

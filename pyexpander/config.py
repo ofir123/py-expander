@@ -8,7 +8,8 @@ CLOUD_ENCRYPTED_PATH = 'Encrypted'
 CLOUD_PLAIN_PATH = 'Media'
 CLOUD_TV_PATH = 'TV'
 CLOUD_MOVIES_PATH = 'Movies'
-CLOUD_KIDS_PATH = 'Kids'
+CLOUD_KIDS_TV_PATH = 'Kids TV'
+CLOUD_KIDS_MOVIES_PATH = 'Kids Movies'
 CLOUD_UFC_PATH = 'UFC'
 CLOUD_VIDEOS_PATH = 'Videos'
 
@@ -30,15 +31,8 @@ EXTRACTION_EXECUTABLE = '7z'
 SHOULD_FIND_SUBTITLES = True
 # A map between each language and its favorite Subliminal providers (None for all providers).
 LANGUAGES_MAP = {
-    babelfish.Language('heb'): ['wizdom', 'cinemast'],
+    babelfish.Language('heb'): ['wizdom'],
     babelfish.Language('eng'): []
-}
-# A map between each provider and its credentials.
-PROVIDER_CONFIGS = {
-    'cinemast': {
-        'username': 'subliminal@gmail.com',
-        'password': 'subliminal'
-    }
 }
 
 # Upload settings.
