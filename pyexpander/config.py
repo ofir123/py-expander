@@ -34,6 +34,7 @@ LANGUAGES_MAP = {
     babelfish.Language('heb'): ['wizdom'],
     babelfish.Language('eng'): []
 }
+PROVIDER_CONFIGS = None
 
 # Upload settings.
 SHOULD_UPLOAD = True
@@ -47,7 +48,7 @@ LANGUAGE_EXTENSIONS = ['.he', '.en']
 # encfs settings.
 SHOULD_ENCRYPT = True
 ENCFS_PATH = '/usr/bin/encfs'
-FUSERMOUNT_PATH = '/usr/bin/fusermount'
+UMOUNT_PATH = '/usr/bin/umount'
 ENCFS_ENVIRONMENT_VARIABLE = 'ENCFS6_CONFIG'
 ENCFS_CONFIG_PATH = '/encfs6/config/path.xml'
 ENCFS_PASSWORD = 'Password1'

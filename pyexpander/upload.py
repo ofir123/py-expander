@@ -254,7 +254,7 @@ def upload_file(file_path):
             os.rename(os.path.join(original_dir, cloud_file), file_path)
         # Unmount ENCFS directory.
         if config.SHOULD_ENCRYPT:
-            subprocess.call('{} -u "{}"'.format(config.FUSERMOUNT_PATH, plain_base_dir), shell=True)
+            subprocess.call('{} -l "{}"'.format(config.UMOUNT_PATH, plain_base_dir), shell=True)
         # Delete all temporary directories.
         shutil.rmtree(base_dir)
         return upload_succeeded
