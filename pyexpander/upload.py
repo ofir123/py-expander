@@ -176,7 +176,7 @@ def upload_file(file_path):
         'hebrew.dubbed' in fixed_file_name.lower() or 'hebrew.dubbed' in fixed_file_path.lower() or \
         'hebrew dubbed' in fixed_file_name.lower() or 'hebrew dubbed' in fixed_file_path.lower()
 
-    if 'ufc' in fixed_file_name.lower() or 'ufc' in fixed_file_path.lower():
+    if ('ufc' in fixed_file_name.lower() or 'ufc' in fixed_file_path.lower()) and 'rivals' not in fixed_file_name.lower():
         cloud_dir, cloud_file = _extract_ufc_path(fixed_file_name)
     elif 'masterclass' in fixed_file_name.lower() or 'masterclass' in fixed_file_path.lower():
         cloud_dir, cloud_file = _extract_masterclass_path(fixed_file_name)
