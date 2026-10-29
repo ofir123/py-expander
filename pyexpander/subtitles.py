@@ -1,18 +1,39 @@
 from copy import deepcopy
 import datetime
 import os
+from threading import RLock
 
 import babelfish
 import logbook
 import subliminal
+from dogpile.cache.backends.file import AbstractFileLock
+from platformdirs import user_cache_dir
 from subliminal.cache import region
-from subliminal.cli import dirs, cache_file, MutexLock
 from subliminal.subtitle import get_subtitle_path
 
 from .config import LANGUAGES_MAP, PROVIDER_CONFIGS, LANGUAGE_EXTENSIONS, SUBTITLES_EXTENSIONS, \
     DEFAULT_LANGUAGE_EXTENSION
 
 logger = logbook.Logger('subtitles')
+
+
+class SubtitleCacheLock(AbstractFileLock):
+    """Thread lock for the shared DBM cache, independent of Subliminal's CLI."""
+
+    def __init__(self, filename):
+        self._lock = RLock()
+
+    def acquire_read_lock(self, wait):
+        return self._lock.acquire(blocking=wait)
+
+    def acquire_write_lock(self, wait):
+        return self._lock.acquire(blocking=wait)
+
+    def release_read_lock(self):
+        self._lock.release()
+
+    def release_write_lock(self):
+        self._lock.release()
 
 
 def _check_hebits_dir(path):
@@ -49,7 +70,7 @@ def find_file_subtitles(path):
                 language = babelfish.Language.fromalpha2(language_extension.strip('.'))
                 logger.debug('Language is now {}'.format(language))
                 if language in languages_map:
-                    subtitles_path = os.path.join(os.path.dirname(path), real_file_name + file_extension)
+                    subtitles_path = os.path.join(os.path.dirname(path), file_name + file_extension)
                     languages_map.pop(language)
                     results_list.append(subtitles_path)
                     logger.info('Found existing subtitles ({}) file: {}'.format(language, subtitles_path))
@@ -88,19 +109,20 @@ def find_file_subtitles(path):
                 if subtitles.content is None:
                     logger.debug('Skipping subtitle {}: no content'.format(subtitles))
                     continue
-                subtitles_path = get_subtitle_path(video.name, subtitles.language)
+                subtitles_path = get_subtitle_path(video.name, suffix='.' + str(subtitles.language))
                 logger.info('Saving {} to: {}'.format(subtitles, subtitles_path))
-                open(subtitles_path, 'wb').write(subtitles.content)
+                with open(subtitles_path, 'wb') as subtitles_file:
+                    subtitles_file.write(subtitles.content)
                 results_list.append(subtitles_path)
-            return results_list
+        return results_list
     except ValueError:
         # Subliminal raises a ValueError if the given file is not a video file.
         logger.info('Not a video file. Moving on...')
-        return []
+        return results_list
     except Exception:
         # Subliminal crashes randomly sometimes.
         logger.exception('Error while searching for subtitles. Moving on...')
-        return []
+        return results_list
 
 
 def configure_subtitles_cache():
@@ -109,9 +131,9 @@ def configure_subtitles_cache():
     Should be called once when the program starts.
     """
     # Configure the subliminal cache.
-    cache_dir = dirs.user_cache_dir
+    cache_dir = user_cache_dir('subliminal')
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
-    cache_file_path = os.path.join(cache_dir, cache_file)
+    cache_file_path = os.path.join(cache_dir, 'subliminal.dbm')
     region.configure('dogpile.cache.dbm', expiration_time=datetime.timedelta(days=30),
-                     arguments={'filename': cache_file_path, 'lock_factory': MutexLock})
+                     arguments={'filename': cache_file_path, 'lock_factory': SubtitleCacheLock})

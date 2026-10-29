@@ -20,6 +20,14 @@ Currently only 7-Zip is supported. (Make sure to use the version with the rar pl
 
 Usage
 ===========
+
+Requires Python 3.10+ and Subliminal 2.8+. For Hebrew/Wizdom subtitles, install
+the matching `hebrew` Subliminal fork before installing this package:
+
+    python -m pip install -e ../subliminal -e ../shows-formatter -e .
+
+Run `python -m pytest -q tests` for subtitle compatibility and staging tests.
+The tests use temporary files and mock uploads; they do not run a torrent job.
 First of all, install the shows-formatter package (from my GitHub repository).
 
 Then, Install the script as follows:
@@ -48,7 +56,7 @@ Or for uTorrent:
 
     Options -> Advanced -> Run Program
     When download is finished, run (Change paths accordingly): 
-	'C:\Python35\pythonw.exe D:\Projects\py-expander\src\pyexpander\torrent_handler.py "%D" "%F"'
+	'C:\Python310\pythonw.exe D:\Projects\py-expander\src\pyexpander\torrent_handler.py "%D" "%F"'
 	
 	Important: Be sure to use different directories for new downloads and completed downloads, or else pyexpander won't work.
 
