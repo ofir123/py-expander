@@ -1,20 +1,25 @@
+"""Small executable and path helpers."""
+
+from __future__ import annotations
+
 import os
+import shutil
+from pathlib import Path
+
+PathLike = str | os.PathLike[str]
 
 
-def find_executable(filename):
-    """
-    Searches for a file in paths exported to the PATH environmental variable.
+def find_executable(filename: PathLike) -> str:
+    """Resolve a program using the platform's executable search rules."""
+    executable = shutil.which(os.fspath(filename))
+    if executable is None:
+        raise FileNotFoundError(f"Executable not found: {filename}")
+    return executable
 
-    :param filename: The file to search for.
-    :return: The full executable path.
-    """
-    # Search the system path for the executable
-    if os.name == 'nt':
-        filename += '.exe'
-    for directory in os.getenv('PATH').split(os.pathsep):
-        # Ensure the directory in the path is a real directory.
-        if os.path.exists(directory):
-            files = os.listdir(directory)
-            if filename in files:
-                return os.path.join(directory, filename)
-    raise Exception('{} not found or is not in system PATH'.format(filename))
+
+def child_path(root: Path, relative: PathLike) -> Path:
+    """Resolve a configured child path without allowing it outside its root."""
+    candidate = root / relative
+    if not candidate.resolve().is_relative_to(root.resolve()):
+        raise ValueError(f"Path must stay inside {root}: {relative}")
+    return candidate

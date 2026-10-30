@@ -1,52 +1,45 @@
-import os
+"""Find subtitles and upload staged media."""
 
-import logbook
+from __future__ import annotations
 
-from pyexpander.upload import upload_file
+import logging
+from pathlib import Path
+
 from . import config
 from .subtitles import find_file_subtitles
+from .upload import upload_file
+from .utils import PathLike
 
-logger = logbook.Logger('post_process')
-
-
-def process_file(file_path):
-    """
-    Processes a single file.
-
-    :param file_path: The file path to process.
-    :return: True if file processing was successful, and False otherwise.
-    """
-    # Get subtitles.
-    subtitles_paths = None
-    if config.SHOULD_FIND_SUBTITLES and os.path.splitext(file_path)[-1] not in config.SUBTITLES_EXTENSIONS:
-        subtitles_paths = find_file_subtitles(file_path)
-    # Upload files to Google Drive.
-    if config.SHOULD_UPLOAD:
-        if subtitles_paths:
-            for subtitles_path in subtitles_paths:
-                upload_file(subtitles_path)
-        return upload_file(file_path)
-    return True
+logger = logging.getLogger(__name__)
 
 
-def process_directory(directory):
-    """
-    The main directory processing function.
-    It searches for files in the directories matching the known extensions and moves/copies them to
-    the relevant path in the destination (/path/category/torrent_name).
+def process_file(file_path: PathLike) -> bool:
+    """Process one media file; report failed sidecars as failed processing."""
+    path = Path(file_path)
+    if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
+        return False
+    if path.suffix.lower() not in {suffix.lower() for suffix in config.EXTENSIONS_WHITE_LIST}:
+        return False
+    is_subtitle = path.suffix.lower() in config.SUBTITLES_EXTENSIONS
+    sidecars = find_file_subtitles(path) if config.SHOULD_FIND_SUBTITLES and not is_subtitle else []
+    if not config.SHOULD_UPLOAD:
+        return True
+    subtitles_ok = True
+    for sidecar in sidecars:
+        if not upload_file(sidecar):
+            subtitles_ok = False
+    return upload_file(path) and subtitles_ok
 
-    :param directory: The directory to process.
-    :return: The number of successfully processed files.
-    """
-    successful_files = 0
-    for directory_path, _, file_names in os.walk(directory):
-        logger.info('Processing directory {}'.format(directory_path))
-        # Process subtitles last, since videos will search for them.
-        sorted_file_names = sorted(file_names, key=lambda f: os.path.splitext(f)[-1] in config.SUBTITLES_EXTENSIONS)
-        for filename in sorted_file_names:
-            file_path = os.path.join(directory_path, filename)
-            # Old files might be removed by previous processing.
-            if os.path.exists(file_path):
-                if process_file(file_path):
-                    successful_files += 1
-    return successful_files
+
+def process_directory(directory: PathLike) -> int:
+    """Process videos before existing sidecars, retaining failed files for retry."""
+    paths = sorted(
+        (path for path in Path(directory).rglob("*") if path.is_file() and not path.is_symlink()),
+        key=lambda path: (path.suffix.lower() in config.SUBTITLES_EXTENSIONS, str(path)),
+    )
+    successful = 0
+    for path in paths:
+        if path.exists() and process_file(path):
+            successful += 1
+    logger.info("Processed %s files in %s", successful, directory)
+    return successful

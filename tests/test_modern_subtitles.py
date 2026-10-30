@@ -1,5 +1,5 @@
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import babelfish
 from dogpile.cache import make_region
@@ -8,9 +8,7 @@ from subliminal.subtitle import Subtitle
 
 def make_subtitle(language, text="subtitle"):
     subtitle = Subtitle(babelfish.Language(language), language)
-    subtitle.set_content(
-        ("1\n00:00:01,000 --> 00:00:02,000\n" + text + "\n\n").encode()
-    )
+    subtitle.set_content(("1\n00:00:01,000 --> 00:00:02,000\n" + text + "\n\n").encode())
     return subtitle
 
 
@@ -42,9 +40,7 @@ def test_cache_roundtrip(tmp_path, monkeypatch):
         return subtitles.region.get(str(index))
 
     with ThreadPoolExecutor(max_workers=4) as executor:
-        assert list(executor.map(cache_video, range(20))) == [
-            "video-" + str(i) for i in range(20)
-        ]
+        assert list(executor.map(cache_video, range(20))) == ["video-" + str(i) for i in range(20)]
 
 
 def test_download_and_upload_staging(tmp_path, monkeypatch):
@@ -56,19 +52,13 @@ def test_download_and_upload_staging(tmp_path, monkeypatch):
     hebrew, english = make_subtitle("heb", "שלום"), make_subtitle("eng", "Hello")
 
     def download(videos, languages, **kwargs):
-        return {
-            next(iter(videos)): [
-                hebrew if babelfish.Language("heb") in languages else english
-            ]
-        }
+        return {next(iter(videos)): [hebrew if babelfish.Language("heb") in languages else english]}
 
     monkeypatch.setattr(subtitles.subliminal, "download_best_subtitles", download)
     monkeypatch.setattr(postprocess.config, "SHOULD_FIND_SUBTITLES", True)
     monkeypatch.setattr(postprocess.config, "SHOULD_UPLOAD", True)
     uploads = []
-    monkeypatch.setattr(
-        postprocess, "upload_file", lambda path: uploads.append(Path(path)) or True
-    )
+    monkeypatch.setattr(postprocess, "upload_file", lambda path: uploads.append(Path(path)) or True)
     assert postprocess.process_directory(str(tmp_path)) == 1
     assert uploads == [
         video.with_suffix(".he.srt"),
@@ -90,24 +80,18 @@ def test_existing_subtitles_preserved_without_download(tmp_path, monkeypatch):
     def unexpected_download(*args, **kwargs):
         raise AssertionError("Existing languages must not be downloaded again")
 
-    monkeypatch.setattr(
-        subtitles.subliminal, "download_best_subtitles", unexpected_download
-    )
+    monkeypatch.setattr(subtitles.subliminal, "download_best_subtitles", unexpected_download)
     assert set(subtitles.find_file_subtitles(str(video))) == {str(hebrew), str(english)}
     assert hebrew.read_text() == "existing Hebrew"
 
 
-def test_existing_language_returned_when_other_language_unavailable(
-    tmp_path, monkeypatch
-):
+def test_existing_language_returned_when_other_language_unavailable(tmp_path, monkeypatch):
     subtitles = configure(monkeypatch)
     video = tmp_path / "Movie.2013.mkv"
     video.touch()
     hebrew = video.with_suffix(".he.srt")
     hebrew.write_text("existing Hebrew")
-    monkeypatch.setattr(
-        subtitles.subliminal, "download_best_subtitles", lambda videos, **kw: {}
-    )
+    monkeypatch.setattr(subtitles.subliminal, "download_best_subtitles", lambda videos, **kw: {})
     assert subtitles.find_file_subtitles(str(video)) == [str(hebrew)]
 
 
@@ -121,7 +105,5 @@ def test_existing_language_returned_when_provider_fails(tmp_path, monkeypatch):
     def failed_download(*args, **kwargs):
         raise RuntimeError("provider unavailable")
 
-    monkeypatch.setattr(
-        subtitles.subliminal, "download_best_subtitles", failed_download
-    )
+    monkeypatch.setattr(subtitles.subliminal, "download_best_subtitles", failed_download)
     assert subtitles.find_file_subtitles(str(video)) == [str(hebrew)]

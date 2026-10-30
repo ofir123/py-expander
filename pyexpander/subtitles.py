@@ -1,139 +1,120 @@
-from copy import deepcopy
-import datetime
-import os
-from threading import RLock
+"""Subtitle retrieval using the modern Hebrew-enabled Subliminal API."""
+
+from __future__ import annotations
+
+import logging
+from datetime import timedelta
+from pathlib import Path
 
 import babelfish
-import logbook
 import subliminal
 from dogpile.cache.backends.file import AbstractFileLock
+from filelock import FileLock, Timeout
 from platformdirs import user_cache_dir
 from subliminal.cache import region
-from subliminal.subtitle import get_subtitle_path
 
-from .config import LANGUAGES_MAP, PROVIDER_CONFIGS, LANGUAGE_EXTENSIONS, SUBTITLES_EXTENSIONS, \
-    DEFAULT_LANGUAGE_EXTENSION
+from .config import (
+    DEFAULT_LANGUAGE_EXTENSION,
+    LANGUAGE_EXTENSIONS,
+    LANGUAGES_MAP,
+    PROVIDER_CONFIGS,
+    SUBTITLES_EXTENSIONS,
+)
+from .utils import PathLike
 
-logger = logbook.Logger('subtitles')
+logger = logging.getLogger(__name__)
 
 
 class SubtitleCacheLock(AbstractFileLock):
-    """Thread lock for the shared DBM cache, independent of Subliminal's CLI."""
+    """Serialize DBM access across threads and separate torrent-hook processes."""
 
-    def __init__(self, filename):
-        self._lock = RLock()
+    def __init__(self, filename: str) -> None:
+        self._lock = FileLock(f"{filename}.lock")
 
-    def acquire_read_lock(self, wait):
-        return self._lock.acquire(blocking=wait)
+    def acquire_read_lock(self, wait: bool) -> bool:
+        try:
+            self._lock.acquire(timeout=-1 if wait else 0)
+        except Timeout:
+            return False
+        return True
 
-    def acquire_write_lock(self, wait):
-        return self._lock.acquire(blocking=wait)
+    def acquire_write_lock(self, wait: bool) -> bool:
+        return self.acquire_read_lock(wait)
 
-    def release_read_lock(self):
+    def release_read_lock(self) -> None:
         self._lock.release()
 
-    def release_write_lock(self):
+    def release_write_lock(self) -> None:
         self._lock.release()
 
 
-def _check_hebits_dir(path):
-    for file_name in os.listdir(path):
-        if 'hebits' in file_name.lower():
-            return True
-    return False
+def _check_hebits_dir(path: PathLike) -> bool:
+    """Recognize the legacy marker for unlabelled Hebrew subtitles."""
+    return any("hebits" in item.name.casefold() for item in Path(path).iterdir())
 
 
-def find_file_subtitles(path):
-    """
-    Finds subtitles for the given video file path.
-
-    :param path: The path of the video file to find subtitles to.
-    :return: The list of subtitles file paths, or None if a problem occurred.
-    """
-    results_list = []
-    # We don't want to mess with the original map.
-    languages_map = deepcopy(LANGUAGES_MAP)
-    # Check for existing subtitle files first.
-    logger.debug('Checking for existing subtitles for file: {}'.format(path))
-    video_name = os.path.splitext(os.path.basename(path))[0]
-    for file_name, file_extension in [os.path.splitext(p) for p in os.listdir(os.path.dirname(path))]:
-        logger.debug('Checking file {} with extension {}'.format(file_name, file_extension))
-        if file_extension in SUBTITLES_EXTENSIONS:
-            real_file_name, language_extension = os.path.splitext(file_name)
-            # Switch empty extension with default one.
-            if language_extension not in LANGUAGE_EXTENSIONS:
-                language_extension = '.he' if _check_hebits_dir(os.path.dirname(path)) else DEFAULT_LANGUAGE_EXTENSION
-                real_file_name = file_name
-            logger.debug('Language extension is now {}'.format(language_extension))
-            logger.debug('Comparing {} with {}'.format(real_file_name.lower(), video_name.lower()))
-            if real_file_name.lower() == video_name.lower() and language_extension in LANGUAGE_EXTENSIONS:
-                language = babelfish.Language.fromalpha2(language_extension.strip('.'))
-                logger.debug('Language is now {}'.format(language))
-                if language in languages_map:
-                    subtitles_path = os.path.join(os.path.dirname(path), file_name + file_extension)
-                    languages_map.pop(language)
-                    results_list.append(subtitles_path)
-                    logger.info('Found existing subtitles ({}) file: {}'.format(language, subtitles_path))
-    if not languages_map:
-        return results_list
-    # Get new ones if needed.
-    logger.info('Searching subtitles for file: {}'.format(path))
+def find_file_subtitles(path: PathLike) -> list[str]:
+    """Reuse existing sidecars, then search each missing language independently."""
+    video_path = Path(path)
+    if not video_path.is_file():
+        return []
+    missing = dict(LANGUAGES_MAP)
+    paths: list[str] = []
+    for sidecar in sorted(video_path.parent.iterdir()):
+        if (
+            not sidecar.is_file()
+            or sidecar.is_symlink()
+            or sidecar.suffix.lower() not in SUBTITLES_EXTENSIONS
+        ):
+            continue
+        stem = Path(sidecar.stem)
+        language_suffix = stem.suffix.lower()
+        name = stem.stem
+        if language_suffix not in LANGUAGE_EXTENSIONS:
+            language_suffix = ".he" if _check_hebits_dir(video_path.parent) else DEFAULT_LANGUAGE_EXTENSION
+            name = sidecar.stem
+        if name.casefold() != video_path.stem.casefold():
+            continue
+        language = babelfish.Language.fromalpha2(language_suffix.lstrip("."))
+        if language in missing:
+            del missing[language]
+            paths.append(str(sidecar))
+    if not missing:
+        return paths
     try:
-        # Get required video information.
-        video = subliminal.scan_video(path)
-        other_languages = []
-        subtitle_results = []
-        for language, providers in languages_map.items():
-            # Filter providers the user didn't ask for.
-            if not providers:
-                other_languages.append(language)
-            else:
-                current_result = subliminal.download_best_subtitles(
-                    {video}, languages={language}, providers=providers, provider_configs=PROVIDER_CONFIGS).values()
-                if len(current_result) > 0:
-                    subtitle_results.extend(list(current_result)[0])
-        # Download all other languages.
-        for language in other_languages:
-            current_result = subliminal.download_best_subtitles(
-                {video}, languages={language}, provider_configs=PROVIDER_CONFIGS).values()
-            if len(current_result) > 0:
-                subtitle_results.extend(list(current_result)[0])
-        # Handle results.
-        if len(subtitle_results) == 0:
-            logger.info('No subtitles were found. Moving on...')
-        else:
-            logger.info('Found {} subtitles. Saving files...'.format(len(subtitle_results)))
-            # Save subtitles alongside the video file.
-            for subtitles in subtitle_results:
-                # Filter empty subtitles files.
-                if subtitles.content is None:
-                    logger.debug('Skipping subtitle {}: no content'.format(subtitles))
-                    continue
-                subtitles_path = get_subtitle_path(video.name, suffix='.' + str(subtitles.language))
-                logger.info('Saving {} to: {}'.format(subtitles, subtitles_path))
-                with open(subtitles_path, 'wb') as subtitles_file:
-                    subtitles_file.write(subtitles.content)
-                results_list.append(subtitles_path)
-        return results_list
-    except ValueError:
-        # Subliminal raises a ValueError if the given file is not a video file.
-        logger.info('Not a video file. Moving on...')
-        return results_list
-    except Exception:
-        # Subliminal crashes randomly sometimes.
-        logger.exception('Error while searching for subtitles. Moving on...')
-        return results_list
+        video = subliminal.scan_video(str(video_path))
+    except (OSError, ValueError):
+        logger.debug("Not a readable video: %s", video_path)
+        return paths
+    for language, providers in missing.items():
+        try:
+            results = subliminal.download_best_subtitles(
+                {video}, languages={language}, providers=providers or None, provider_configs=PROVIDER_CONFIGS
+            ).get(video, [])
+            # A provider must not replace a sidecar in an unrelated language.
+            results = [subtitle for subtitle in results if subtitle.language == language]
+            saved = subliminal.save_subtitles(video, results, extension=".srt")
+            paths.extend(subtitle.get_path(video, extension=".srt") for subtitle in saved)
+        except Exception:
+            logger.exception("Subtitle lookup failed for %s (%s)", video_path, language)
+    return paths
 
 
-def configure_subtitles_cache():
-    """
-    Configure the subliminal cache settings.
-    Should be called once when the program starts.
-    """
-    # Configure the subliminal cache.
-    cache_dir = user_cache_dir('subliminal')
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
-    cache_file_path = os.path.join(cache_dir, 'subliminal.dbm')
-    region.configure('dogpile.cache.dbm', expiration_time=datetime.timedelta(days=30),
-                     arguments={'filename': cache_file_path, 'lock_factory': SubtitleCacheLock})
+def configure_subtitles_cache() -> None:
+    """Configure a process-safe private cache once per interpreter."""
+    requested = {provider for providers in LANGUAGES_MAP.values() if providers for provider in providers}
+    unavailable = requested - set(subliminal.provider_manager.names())
+    if unavailable:
+        raise RuntimeError(
+            f"Subtitle providers unavailable: {', '.join(sorted(unavailable))}. "
+            "Install the configured Hebrew-enabled Subliminal fork."
+        )
+    if region.is_configured:
+        return
+    directory = Path(user_cache_dir("pyexpander"))
+    directory.mkdir(parents=True, exist_ok=True)
+    region.configure(
+        "dogpile.cache.dbm",
+        expiration_time=timedelta(days=30).total_seconds(),
+        arguments={"filename": str(directory / "subliminal.dbm"), "lock_factory": SubtitleCacheLock},
+    )

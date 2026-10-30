@@ -1,133 +1,158 @@
-#!/usr/bin/env python3
+"""Command line and torrent-completion entry points."""
+
+from __future__ import annotations
+
+import argparse
+import logging
 import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
+from importlib.metadata import version
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-import logbook
+from filelock import FileLock
 
 from pyexpander import config
-from pyexpander.extract import extract_all, cleanup
+from pyexpander.extract import cleanup, extract_all
 from pyexpander.postprocess import process_directory, process_file
 from pyexpander.subtitles import configure_subtitles_cache
 from pyexpander.transmission import get_environment_variables_from_transmission
+from pyexpander.utils import PathLike
 
-logger = logbook.Logger('handler')
-
-
-def _get_log_handlers():
-    """
-    Initializes all relevant log handlers.
-
-    :return: A list of log handlers.
-    """
-    return [
-        logbook.NullHandler(),
-        logbook.StreamHandler(sys.stdout, level=logbook.DEBUG, bubble=True),
-        logbook.RotatingFileHandler(config.LOGFILE, level=logbook.DEBUG, max_size=5 * 1024 * 1024, backup_count=1,
-                                    bubble=True)
-    ]
+logger = logging.getLogger(__name__)
 
 
-def _recreate_empty_torrent(current_path, recreate_path, is_file):
-    logger.debug("Recreating empty torrent...")
+def _get_log_handlers() -> list[logging.Handler]:
+    """Create console and rotating-file handlers after arguments are parsed."""
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if config.LOGFILE:
+        logfile = Path(config.LOGFILE).expanduser()
+        logfile.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(
+            RotatingFileHandler(logfile, maxBytes=5 * 1024 * 1024, backupCount=1, encoding="utf-8")
+        )
+    return handlers
+
+
+def _recreate_empty_torrent(current_path: PathLike, recreate_path: PathLike, is_file: bool) -> None:
+    """Recreate torrent placeholders only when configured to discard source data."""
+    current, target = Path(current_path), Path(recreate_path)
     if is_file:
-        open(recreate_path, "wb").truncate()
-    else:
-        for dir_path, dir_names, file_names in os.walk(current_path):
-            base_path = dir_path.replace(current_path, recreate_path)
-            os.makedirs(base_path, exist_ok=True)
-            for dir_name in dir_names:
-                os.makedirs(os.path.join(base_path, dir_name), exist_ok=True)
-            for file_name in file_names:
-                open(os.path.join(base_path, file_name), "wb").truncate()
-
-
-def expand_torrent(torrent_path):
-    """
-    Perform torrent expansion steps - extraction, copying/moving to relevant directory and cleanup.
-
-    :param torrent_path: The torrent path to expand.
-    """
-    logger.info('Processing torrent {}'.format(torrent_path))
-    torrent_path = os.path.abspath(torrent_path)
-    is_file = os.path.isfile(torrent_path)
-
-    # If upload was finished in the past, recreate and skip upload.
-    if os.path.basename(torrent_path).startswith(config.FINISHED_UPLOAD_PREFIX):
-        _recreate_empty_torrent(torrent_path, torrent_path, is_file)
-        logger.info('File was uploaded in the past. Skipping!')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"")
         return
+    target.mkdir(parents=True, exist_ok=True)
+    for path in current.rglob("*"):
+        destination = target / path.relative_to(current)
+        if path.is_dir():
+            destination.mkdir(parents=True, exist_ok=True)
+        elif path.is_file() and not path.is_symlink():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b"")
 
-    # Move/Copy all relevant files to their location (keep original files for uploading).
-    handler = shutil.move
-    if not config.SHOULD_DELETE and not config.SHOULD_WIPE_CONTENT:
-        handler = shutil.copy if is_file else shutil.copytree
-    new_path = os.path.join(config.DATA_PATH, os.path.basename(torrent_path))
-    logger.info('{} {} to {}'.format(handler.__name__, torrent_path, new_path))
-    try:
-        handler(torrent_path, new_path)
-        # Leave an empty file if requested, to avoid hit & runs.
-        if not config.SHOULD_DELETE and config.SHOULD_WIPE_CONTENT:
-            _recreate_empty_torrent(new_path, torrent_path, is_file=is_file)
 
-        # Set relevant permissions.
-        if os.name != 'nt':
-            subprocess.check_output(['chmod', config.EXTRACTION_FILES_MASK, '-R', new_path])
-        # Handle new path.
+def expand_torrent(torrent_path: PathLike) -> bool:
+    """Stage a torrent without overwriting previous work, then process it."""
+    source = Path(torrent_path).expanduser()
+    if source.is_symlink():
+        raise ValueError("Torrent paths must not be symbolic links")
+    source = source.resolve()
+    if not source.exists():
+        raise FileNotFoundError(source)
+    if config.FINISHED_UPLOAD_PREFIX and source.name.startswith(config.FINISHED_UPLOAD_PREFIX):
+        _recreate_empty_torrent(source, source, source.is_file())
+        return True
+    data = Path(config.DATA_PATH).expanduser().resolve()
+    destination = data / source.name
+    if destination == source or data.is_relative_to(source):
+        raise ValueError("Download and staging directories must be separate")
+    data.mkdir(parents=True, exist_ok=True)
+    with FileLock(str(data / f".{source.name}.lock")):
+        return _stage_torrent(source, destination)
+
+
+def _stage_torrent(source: Path, destination: Path) -> bool:
+    """Process one torrent while holding its staging lock."""
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError(f"Staged torrent already exists: {destination}")
+    if source.is_dir() and any(path.is_symlink() for path in source.rglob("*")):
+        raise ValueError("Torrent directories must not contain symbolic links")
+    is_file = source.is_file()
+    keep_source = not config.SHOULD_DELETE and not config.SHOULD_WIPE_CONTENT
+    if keep_source:
         if is_file:
-            process_file(new_path)
+            shutil.copy2(source, destination)
         else:
-            extract_all(new_path)
-            # Perform cleanup only if at least one file was processed successfully. Otherwise, there was a problem.
-            if process_directory(new_path) > 0:
-                cleanup(new_path)
-    except OSError as ex:
-        logger.exception('Failed to {} {}: {}'.format(handler.__name__, torrent_path, ex))
-    logger.info('Done!')
+            shutil.copytree(source, destination)
+    else:
+        shutil.move(str(source), destination)
+        if not config.SHOULD_DELETE and config.SHOULD_WIPE_CONTENT:
+            _recreate_empty_torrent(destination, source, is_file)
+    if os.name != "nt":
+        mode = int(str(config.EXTRACTION_FILES_MASK), 8)
+        for path in [destination, *destination.rglob("*")] if destination.is_dir() else [destination]:
+            if not path.is_symlink():
+                path.chmod(mode)
+    if is_file:
+        return process_file(destination)
+    extract_all(destination)
+    successful = process_directory(destination)
+    cleanup(destination)
+    pending = any(
+        path.is_file() and path.suffix.lower() in config.EXTENSIONS_WHITE_LIST
+        for path in destination.rglob("*")
+    )
+    recovery = any(path.is_dir() for path in destination.rglob(".pyexpand-*"))
+    return successful > 0 and not recovery and (not config.SHOULD_UPLOAD or not pending)
 
 
-def expand_torrent_from_transmission():
-    """
-    Expand a torrent when called directly from transmission (by using environment variables).
-    """
-    torrent_path = get_environment_variables_from_transmission()
-    expand_torrent(torrent_path)
+def expand_torrent_from_transmission() -> bool:
+    """Process the torrent described by Transmission's environment."""
+    return expand_torrent(get_environment_variables_from_transmission())
 
 
-def main():
-    """
-    This function is designed to be called from command line.
-    If an argument (either as the full path, or as a base dir and a file) is provided,
-    the script will try to expand it.
-    Else, we assume transmission is calling the script.
-    """
-    with logbook.NestedSetup(_get_log_handlers()).applicationbound():
-        logger.info('Py-expander started!')
-        try:
-            # Set subliminal cache first.
-            if config.SHOULD_FIND_SUBTITLES:
-                logger.debug('Setting subtitles cache...')
-                configure_subtitles_cache()
-            # Parse input arguments.
-            if len(sys.argv) == 3:
-                directory = sys.argv[1]
-                filename = sys.argv[2]
-                if directory == config.DEFAULT_PATH:
-                    torrent_path = os.path.join(directory, filename)
-                    logger.info('Input is a file: {}'.format(torrent_path))
-                else:
-                    torrent_path = directory
-                    logger.info('Input is a dir: {}'.format(torrent_path))
-                expand_torrent(torrent_path)
-            elif len(sys.argv) == 2:
-                expand_torrent(sys.argv[1])
-            else:
-                expand_torrent_from_transmission()
-        except:
-            logger.exception('Critical exception occurred!')
-            raise
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run a path, legacy uTorrent pair, or Transmission completion hook."""
+    parser = argparse.ArgumentParser(
+        description="Extract torrents, find subtitles, and upload organized media."
+    )
+    parser.add_argument("path", nargs="?", help="Completed torrent file or directory")
+    parser.add_argument("filename", nargs="?", help="Legacy uTorrent filename argument")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version('pyexpander')}")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
+    args = parser.parse_args(argv)
+    handlers: list[logging.Handler] = []
+    package_logger = logging.getLogger("pyexpander")
+    previous_level = package_logger.level
+    try:
+        handlers = _get_log_handlers()
+        formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        for handler in handlers:
+            handler.setFormatter(formatter)
+            package_logger.addHandler(handler)
+        package_logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)
+        if config.SHOULD_FIND_SUBTITLES:
+            configure_subtitles_cache()
+        if args.path is None:
+            successful = expand_torrent_from_transmission()
+        else:
+            path = Path(args.path)
+            if args.filename and path.resolve() == Path(config.DEFAULT_PATH).resolve():
+                path /= args.filename
+            successful = expand_torrent(path)
+        return 0 if successful else 1
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+        logger.exception("Torrent processing failed")
+        return 1
+    finally:
+        for handler in handlers:
+            package_logger.removeHandler(handler)
+            handler.close()
+        package_logger.setLevel(previous_level)
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    sys.exit(main())

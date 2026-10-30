@@ -1,263 +1,220 @@
-import os
-import subprocess
-import shutil
-import random
-import string
+"""Name media and upload staged directory trees with rclone and optional EncFS."""
 
-import logbook
+from __future__ import annotations
+
+import logging
+import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
 from guessit import guessit
 from showsformatter import format_show
 
 from . import config
+from .utils import PathLike, child_path
 
-logger = logbook.Logger('uploader')
-
-
-def _encrypt(encrypted_dir, plain_dir):
-    """
-    Encrypt the given plain directory.
-
-    :param encrypted_dir: The encrypted directory to create.
-    :param plain_dir: The plain directory to encrypt (recursively).
-    :return: True if succeeded, and False otherwise.
-    """
-    logger.info('Encrypting directory tree...')
-    # Verify config environment variable first.
-    if not os.environ.get(config.ENCFS_ENVIRONMENT_VARIABLE):
-        logger.info('{} environment variable is not defined. Defining: {}'.format(
-            config.ENCFS_ENVIRONMENT_VARIABLE, config.ENCFS_CONFIG_PATH))
-        os.environ[config.ENCFS_ENVIRONMENT_VARIABLE] = config.ENCFS_CONFIG_PATH
-    # Encrypt!
-    os.makedirs(encrypted_dir)
-    return_code = subprocess.call('echo {} | {} -S "{}" "{}"'.format(
-        config.ENCFS_PASSWORD, config.ENCFS_PATH, encrypted_dir, plain_dir), shell=True)
-    if return_code != 0:
-        logger.error('Bad return code ({}) for encryption. Stopping!'.format(return_code))
-        return False
-    return True
+logger = logging.getLogger(__name__)
+CloudPath = tuple[str | None, str | None]
 
 
-def _extract_ufc_path(file_name):
-    """
-    Extract UFC cloud dir and cloud file name from the given file name.
+def _encrypt(encrypted_dir: PathLike, plain_dir: PathLike) -> bool:
+    """Mount EncFS, supplying its password on stdin without a shell."""
+    env = os.environ.copy()
+    env.setdefault(config.ENCFS_ENVIRONMENT_VARIABLE, str(config.ENCFS_CONFIG_PATH))
+    Path(encrypted_dir).mkdir(parents=True)
+    result = subprocess.run(
+        [str(config.ENCFS_PATH), "-S", str(encrypted_dir), str(plain_dir)],
+        input=f"{config.ENCFS_PASSWORD}\n",
+        env=env,
+        text=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.returncode == 0
 
-    :param file_name: The file name to extract data from.
-    :return: A tuple of format (cloud_dir, cloud_file)
-    """
-    guess_results = guessit(file_name)
 
-    # Get real episode number.
-    episode_num = guess_results.get('episode')
-    if not episode_num:
+def _extract_ufc_path(file_name: str) -> CloudPath:
+    """Keep the existing UFC event/preliminaries naming convention."""
+    guess = guessit(file_name)
+    episode, season = guess.get("episode"), guess.get("season", 0)
+    if not isinstance(episode, int) or not isinstance(season, int):
         return None, None
-    season = guess_results.get('season')
-    if season:
-        episode_num += 100 * season
-    episode_num = '{:03}'.format(episode_num)
-
-    # Get title.
-    lowercase_file_name = file_name.lower()
-    if 'fox' in lowercase_file_name:
-        title = 'UFC On FOX'
-    elif 'espn' in lowercase_file_name:
-        title = 'UFC On ESPN'
-    elif 'fight' in lowercase_file_name and 'night' in lowercase_file_name or 'fn' in lowercase_file_name:
-        title = 'UFC Fight Night'
+    lower = file_name.lower()
+    if "fox" in lower:
+        title = "UFC On FOX"
+    elif "espn" in lower:
+        title = "UFC On ESPN"
+    elif ("fight" in lower and "night" in lower) or "fn" in lower:
+        title = "UFC Fight Night"
     else:
-        title = 'UFC'
-
-    cloud_dir = os.path.join(config.CLOUD_UFC_PATH, '{} {}'.format(title, episode_num))
-    cloud_file = '{} {}'.format(title, episode_num)
-    if 'prelim' in lowercase_file_name:
-        cloud_file += ' - Preliminaries'
-    return cloud_dir, cloud_file
+        title = "UFC"
+    event = f"{title} {episode + 100 * season:03d}"
+    name = f"{event} - Preliminaries" if "prelim" in lower else event
+    return str(Path(config.CLOUD_UFC_PATH) / event), name
 
 
-def _extract_masterclass_path(file_name):
-    """
-    Extract Masterclass cloud dir and cloud file name from the given file name.
-
-    :param file_name: The file name to extract data from.
-    :return: A tuple of format (cloud_dir, cloud_file)
-    """
-    cloud_dir = config.CLOUD_VIDEOS_PATH
-    cloud_file = os.path.splitext(file_name)[0]
-    return cloud_dir, cloud_file
+def _extract_masterclass_path(file_name: str) -> CloudPath:
+    """Keep unstructured Masterclass videos in the configured video library."""
+    return str(config.CLOUD_VIDEOS_PATH), Path(file_name).stem
 
 
-def _guess_path(file_name):
-    """
-    Guess cloud dir and cloud file name from the given file name.
-
-    :param file_name: The file name to guess on.
-    :return: A tuple of format (cloud_dir, cloud_file)
-    """
-    cloud_dir = None
-    cloud_file = None
-    # Start guessing!
-    guess_results = guessit(file_name)
-    video_type = guess_results.get('type')
-    title = guess_results.get('title')
+def _guess_path(file_name: str) -> CloudPath:
+    """Name movies and single/multiple TV episodes, including season zero."""
+    guess = guessit(file_name)
+    title = guess.get("title")
     if isinstance(title, list):
-        title = title[0]
-    if video_type == 'episode' and title:
-        # Translate show title if needed.
+        title = title[0] if title else None
+    if not isinstance(title, str) or not title:
+        return None, None
+    if guess.get("type") == "episode":
+        season, episode = guess.get("season"), guess.get("episode")
+        if not isinstance(season, int) or episode is None:
+            return None, None
         title = format_show(title)
-        season = guess_results.get('season')
-        # Skip rare cases of weird episodes names.
-        if season and not isinstance(season, list):
-            episode = guess_results.get('episode')
-            if episode:
-                # Dirs that end with . are evil!
-                fixed_dir_name = title.rstrip('.')
-                cloud_dir = os.path.join(config.CLOUD_TV_PATH, fixed_dir_name, 'Season {:02d}'.format(season))
-                if isinstance(episode, list):
-                    episode_str = 'E{:02d}-E{:02d}'.format(episode[0], episode[-1])
-                else:
-                    episode_str = 'E{:02d}'.format(episode)
-                cloud_file = '{} - S{:02d}{}'.format(title, season, episode_str)
-    elif video_type == 'movie' and title:
-        # Make sure every word starts with a capital letter.
-        title = title.title()
-        year = guess_results.get('year')
-        if year:
-            cloud_dir = os.path.join(config.CLOUD_MOVIES_PATH, '{} ({})'.format(title, year))
-            cloud_file = '{} ({})'.format(title, year)
-    return cloud_dir, cloud_file
-
-
-def upload_file(file_path):
-    """
-    Upload the given file to its proper Google Drive directory.
-
-    :param: file_path: The file to upload.
-    :return: True if the file was upload successfully, and False otherwise.
-    """
-    logger.info('Uploading file: {}'.format(file_path))
-    fixed_file_path = file_path
-    file_parts = os.path.splitext(file_path)
-
-    # Verify file name.
-    if len(file_parts) != 2:
-        logger.info('File has no extension! Skipping...')
-        return False
-    file_name, file_extension = file_parts
-    file_extension = file_extension.lower()
-    if file_extension not in config.EXTENSIONS_WHITE_LIST:
-        logger.info('File extension is not in white list! Skipping...')
-        return False
-    for black_list_word in config.NAMES_BLACK_LIST:
-        if black_list_word in file_name.lower():
-            logger.info('File name contains a black listed word ({})! Skipping...'.format(black_list_word))
-            return False
-    language_extension = None
-    is_subtitles = file_extension in config.SUBTITLES_EXTENSIONS
-
-    # Fake extension for subtitles in order to help guessit.
-    if is_subtitles:
-        # Remove language extensions if needed.
-        file_parts = os.path.splitext(file_name)
-        if len(file_parts) == 2:
-            fixed_file_name, language_extension = file_parts
-            if language_extension in config.LANGUAGE_EXTENSIONS:
-                fixed_file_path = fixed_file_name + config.DEFAULT_VIDEO_EXTENSION
-            else:
-                language_extension = config.DEFAULT_LANGUAGE_EXTENSION
-                fixed_file_path = file_name + config.DEFAULT_VIDEO_EXTENSION
-
-    # Create cloud path based on guessit results.
-    fixed_file_name = os.path.basename(fixed_file_path)
-    # Remove brackets group name prefix.
-    if fixed_file_name.startswith('[') and ']' in fixed_file_name:
-        fixed_file_name = fixed_file_name.split(']', 1)[1]
-
-    # Check if dubbed.
-    is_kids = 'hebdub' in fixed_file_name.lower() or 'hebdub' in fixed_file_path.lower() or \
-        'hebrew.dubbed' in fixed_file_name.lower() or 'hebrew.dubbed' in fixed_file_path.lower() or \
-        'hebrew dubbed' in fixed_file_name.lower() or 'hebrew dubbed' in fixed_file_path.lower()
-
-    if ('ufc' in fixed_file_name.lower() or 'ufc' in fixed_file_path.lower()) and 'rivals' not in fixed_file_name.lower():
-        cloud_dir, cloud_file = _extract_ufc_path(fixed_file_name)
-    elif 'masterclass' in fixed_file_name.lower() or 'masterclass' in fixed_file_path.lower():
-        cloud_dir, cloud_file = _extract_masterclass_path(fixed_file_name)
-    else:
-        cloud_dir, cloud_file = _guess_path(fixed_file_name)
-
-    if cloud_dir and cloud_file:
-        if is_kids:
-            cloud_dir = cloud_dir.replace(config.CLOUD_MOVIES_PATH, config.CLOUD_KIDS_MOVIES_PATH, 1).replace(config.CLOUD_TV_PATH, config.CLOUD_KIDS_TV_PATH, 1)
-            cloud_file += ' - Hebrew'
-        if language_extension:
-            cloud_file += language_extension
-
-        cloud_file += file_extension
-        logger.info('Cloud path: {}'.format(os.path.join(cloud_dir, cloud_file)))
-        # Create a temporary random cloud dir structure.
-        original_dir = os.path.dirname(file_path)
-        random_dir_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
-        base_dir = os.path.join(original_dir, random_dir_name)
-        plain_base_dir = os.path.join(base_dir, config.CLOUD_PLAIN_PATH)
-        os.makedirs(plain_base_dir)
-        cloud_temp_path = os.path.join(plain_base_dir, cloud_dir)
-        final_file_path = os.path.join(cloud_temp_path, cloud_file)
-        # Use the plain directory when uploading, unless encryption is enabled.
-        upload_base_dir = plain_base_dir
-        # Set up encryption if needed.
-        if config.SHOULD_ENCRYPT:
-            encrypted_base_dir = os.path.join(base_dir, config.CLOUD_ENCRYPTED_PATH)
-            encryption_successful = _encrypt(encrypted_base_dir, plain_base_dir)
-            if not encryption_successful:
-                # Delete directories and stop.
-                shutil.rmtree(base_dir)
-                return False
-            # Upload the encrypted directory tree instead of the plain one.
-            upload_base_dir = encrypted_base_dir
-        gdrive_dir = upload_base_dir.split(base_dir)[1].strip(os.path.sep)
-        logger.info('Moving file to temporary path: {}'.format(cloud_temp_path))
-        os.makedirs(cloud_temp_path)
-        shutil.move(file_path, cloud_temp_path)
-        os.rename(os.path.join(cloud_temp_path, os.path.basename(file_path)), final_file_path)
-
-        # Upload!
-        upload_tries = 0
-        return_code = 1
-        while return_code != 0 and upload_tries < config.MAX_UPLOAD_TRIES:
-            logger.info('Uploading file...')
-            upload_tries += 1
-
-            process_result = subprocess.run(
-                f'{config.RCLONE_PATH} --config {config.RCLONE_CONFIG_PATH} copyto --update "{upload_base_dir}" '
-                f'"GDrive:{gdrive_dir}"', shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                check=False)
-
-            # Check results.
-            return_code = process_result.returncode
-            if return_code != 0:
-                logger.error(
-                    f'Bad return code ({return_code}) for file: {cloud_file}. Output:\n{process_result.stdout}')
-
-                if upload_tries < config.MAX_UPLOAD_TRIES:
-                    logger.info('Trying again!')
-                else:
-                    logger.error('Max retries with no success! Skipping...')
-        # If everything went smoothly, add the file name to the original names log.
-        if return_code == 0:
-            upload_succeeded = True
-            logger.info('Upload succeeded! Deleting original file...')
-            if not is_subtitles:
-                open(config.ORIGINAL_NAMES_LOG, 'a', encoding='UTF-8').write(file_path + '\n')
+        if isinstance(episode, list) and episode and all(isinstance(number, int) for number in episode):
+            episode_text = f"E{episode[0]:02d}-E{episode[-1]:02d}"
+        elif isinstance(episode, int):
+            episode_text = f"E{episode:02d}"
         else:
-            upload_succeeded = False
-            # Reverse everything.
-            logger.info('Upload failed! Reversing all changes...')
-            shutil.move(final_file_path, original_dir)
-            os.rename(os.path.join(original_dir, cloud_file), file_path)
-        # Unmount ENCFS directory.
-        if config.SHOULD_ENCRYPT:
-            subprocess.call('{} -l "{}"'.format(config.UMOUNT_PATH, plain_base_dir), shell=True)
-        # Delete all temporary directories.
-        shutil.rmtree(base_dir)
-        return upload_succeeded
+            return None, None
+        directory = Path(config.CLOUD_TV_PATH) / title.rstrip(".") / f"Season {season:02d}"
+        return str(directory), f"{title} - S{season:02d}{episode_text}"
+    if guess.get("type") == "movie" and isinstance(guess.get("year"), int):
+        name = f"{title.title()} ({guess['year']})"
+        return str(Path(config.CLOUD_MOVIES_PATH) / name), name
+    return None, None
+
+
+def _target_path(source: Path) -> Path | None:
+    """Build a relative cloud filename, preserving language and dubbed markers."""
+    extension = source.suffix.lower()
+    if extension not in config.EXTENSIONS_WHITE_LIST or any(
+        word in source.stem.lower() for word in config.NAMES_BLACK_LIST
+    ):
+        return None
+    name = source.name
+    language = ""
+    if extension in config.SUBTITLES_EXTENSIONS:
+        stem = Path(source.stem)
+        if stem.suffix.lower() in config.LANGUAGE_EXTENSIONS:
+            language, name = stem.suffix.lower(), stem.stem + config.DEFAULT_VIDEO_EXTENSION
+        else:
+            language, name = config.DEFAULT_LANGUAGE_EXTENSION, source.stem + config.DEFAULT_VIDEO_EXTENSION
+    if name.startswith("[") and "]" in name:
+        name = name.split("]", 1)[1].strip()
+    lower = str(source).lower()
+    if "ufc" in lower and "rivals" not in name.lower():
+        directory, filename = _extract_ufc_path(name)
+    elif "masterclass" in lower:
+        directory, filename = _extract_masterclass_path(name)
     else:
-        logger.info('Couldn\'t guess file info. Skipping...')
+        directory, filename = _guess_path(name)
+    if directory is None or filename is None:
+        return None
+    dubbed = any(marker in lower for marker in ("hebdub", "hebrew.dubbed", "hebrew dubbed"))
+    if dubbed:
+        cloud = Path(directory)
+        for original, kids in [
+            (Path(config.CLOUD_MOVIES_PATH), Path(config.CLOUD_KIDS_MOVIES_PATH)),
+            (Path(config.CLOUD_TV_PATH), Path(config.CLOUD_KIDS_TV_PATH)),
+        ]:
+            if cloud.is_relative_to(original):
+                directory = str(kids / cloud.relative_to(original))
+                break
+        filename += " - Hebrew"
+    return Path(directory) / f"{filename}{language}{extension}"
+
+
+def upload_file(file_path: PathLike) -> bool:
+    """Upload one media file, restoring it on failed commands or retries."""
+    source = Path(file_path).absolute()
+    if not source.is_file() or source.is_symlink() or source.stat().st_size == 0:
         return False
+    target = _target_path(source)
+    if target is None:
+        logger.info("Skipping unrecognized media %s", source)
+        return False
+    # Validate all configured children before moving any data.
+    if target.is_absolute() or ".." in target.parts or config.MAX_UPLOAD_TRIES < 1:
+        raise ValueError("Cloud targets must be relative paths and upload attempts must be positive")
+    base = Path(tempfile.mkdtemp(prefix=".pyexpand-", dir=source.parent))
+    staged: Path | None = None
+    mounted = False
+    successful = False
+    removable = True
+    try:
+        plain = child_path(base, config.CLOUD_PLAIN_PATH)
+        plain.mkdir(parents=True)
+        upload_root = plain
+        if config.SHOULD_ENCRYPT:
+            encrypted = child_path(base, config.CLOUD_ENCRYPTED_PATH)
+            if encrypted == plain:
+                raise ValueError("Plain and encrypted staging paths must differ")
+            if not _encrypt(encrypted, plain):
+                return False
+            mounted = True
+            upload_root = encrypted
+        staged = child_path(plain, target)
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), staged)
+        remote = f"GDrive:{upload_root.relative_to(base).as_posix()}"
+        for attempt in range(1, config.MAX_UPLOAD_TRIES + 1):
+            result = subprocess.run(
+                [
+                    str(config.RCLONE_PATH),
+                    "--config",
+                    str(config.RCLONE_CONFIG_PATH),
+                    "copy",
+                    "--update",
+                    str(upload_root),
+                    remote,
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            if result.returncode == 0:
+                if source.suffix.lower() not in config.SUBTITLES_EXTENSIONS:
+                    with Path(config.ORIGINAL_NAMES_LOG).open("a", encoding="utf-8") as log:
+                        log.write(f"{source}\n")
+                successful = True
+                break
+            logger.error(
+                "Upload attempt %s/%s failed for %s: %s",
+                attempt,
+                config.MAX_UPLOAD_TRIES,
+                source.name,
+                result.stdout,
+            )
+    except (OSError, subprocess.SubprocessError, ValueError):
+        logger.exception("Upload failed for %s", source)
+    finally:
+        if not successful and staged is not None and staged.exists():
+            try:
+                if source.exists():
+                    raise FileExistsError(f"Refusing to overwrite restored source: {source}")
+                shutil.move(str(staged), source)
+            except OSError:
+                removable = False
+                logger.exception("Keeping recovery files in %s", base)
+        if mounted:
+            try:
+                unmount = subprocess.run(
+                    [str(config.UMOUNT_PATH), "-l", str(plain)],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                if unmount.returncode:
+                    removable = False
+                    logger.error("Unmount failed; keeping staging directory %s", base)
+            except OSError:
+                removable = False
+                logger.exception("Could not unmount %s; keeping %s", plain, base)
+        if removable:
+            shutil.rmtree(base)
+    return successful

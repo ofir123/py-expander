@@ -1,65 +1,125 @@
-py-expander
-===========
+# py-expander
 
-A python script designed to post-process Transmission torrents.
+Post-process completed Transmission or uTorrent downloads: stage the files,
+extract nested archives with 7-Zip, find subtitles, and upload media to the
+configured Google Drive library with rclone. Optional EncFS encryption and the
+existing TV, movie, Hebrew-dubbed, UFC, and Masterclass naming rules are retained.
 
-The script extracts files recursively (if extract is necessary)
-and the moves the files to a separate data directory.  
-If no RARs are present in the download - the script will copy the files.
+Requires **Python 3.10 or newer**. The application uses ordinary typed functions,
+pathlib, standard logging, and an argparse command line.
 
-The script relies on the 'guessit' package to detect movies/tv downloads.
+## Install
 
-Original torrent files are conserved for upload.
+Use an isolated environment. For Hebrew subtitles, install the tested Subliminal
+fork with Wizdom support, then shows-formatter and py-expander:
 
-The script can also fetch subtitles in chosen languages (change in the config file),  
-and upload the videos to a Google Drive account.
+~~~sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install "git+https://github.com/ofir123/subliminal.git@1b70f0d8b8c03eb63fbe5f3d5e7547a5083257fd"
+python -m pip install "git+https://github.com/ofir123/shows-formatter.git"
+python -m pip install -e ".[dev]"
+~~~
 
-All original torrent names are kept the original names log file.
+For sibling checkouts, the equivalent development install is:
 
-Currently only 7-Zip is supported. (Make sure to use the version with the rar plugin, or compile from source with 'make all')
+~~~sh
+python -m pip install -e ../subliminal -e ../shows-formatter -e ".[dev]"
+~~~
 
-Usage
-===========
+On Windows, activate with .venv\Scripts\activate. Installing the upstream PyPI
+Subliminal package alone does not provide Wizdom. Startup explains any configured
+providers that are missing.
 
-Requires Python 3.10+ and Subliminal 2.8+. For Hebrew/Wizdom subtitles, install
-the matching `hebrew` Subliminal fork before installing this package:
+7-Zip with RAR support is needed for archives. Uploads need rclone and its remote
+named GDrive. EncFS and an unmount executable are needed when encryption is enabled.
+Executable paths and remote library names remain in pyexpander/config.py.
 
-    python -m pip install -e ../subliminal -e ../shows-formatter -e .
+## Use
 
-Run `python -m pytest -q tests` for subtitle compatibility and staging tests.
-The tests use temporary files and mock uploads; they do not run a torrent job.
-First of all, install the shows-formatter package (from my GitHub repository).
+~~~sh
+pyexpand --help
+pyexpand --version
+pyexpand /downloads/The.Wire.S01E01
+pyexpand --verbose /downloads/Man.of.Steel.2013.mkv
+python -m pyexpander /downloads/The.Wire.S01E01
+~~~
 
-Then, Install the script as follows:
+Configure Transmission to run the installed console script:
 
-	$ python setup.py develop
+~~~json
+{
+  "script-torrent-done-enabled": true,
+  "script-torrent-done-filename": "/absolute/path/to/.venv/bin/pyexpand"
+}
+~~~
 
-Edit the configuration with your directories
+With no positional arguments, pyexpand reads TR_TORRENT_DIR and TR_TORRENT_NAME.
+The legacy two-argument uTorrent form remains supported:
 
-	$ vim config.py
+~~~text
+pyexpand "%D" "%F"
+~~~
 
-That's it.
+When the first argument equals DEFAULT_PATH, it is joined to the filename.
+Otherwise the first argument is treated as the completed directory. Direct-file
+hooks also remain available after installing in the same Python environment:
 
-The script can be used from the command line:
+~~~sh
+python /absolute/path/to/pyexpander/torrent_handler.py --help
+~~~
 
-	$ pyexpand /download/The.Wire.S01E01.HDTV
+Exit status is 0 for successful processing and 1 for failed processing.
+Argument errors use argparse's standard status 2. Help/version do not open log
+files, configure the cache, or start a torrent job.
 
-For transmission:
+## Configuration and recovery
 
-	$ vim /var/lib/transmission/settings.json
-	..
-	 "script-torrent-done-enabled": true,
-     "script-torrent-done-filename": "pyexpand",
-    ..
+Your existing pyexpander/config.py values are retained. Review the paths,
+language/provider preferences, and upload/encryption settings for your runtime.
 
-Or for uTorrent:
+- DATA_PATH must be separate from the download directory. Existing staging
+  destinations are rejected so a retry cannot overwrite an earlier failed job.
+- With SHOULD_DELETE and SHOULD_WIPE_CONTENT both false, source downloads are
+  copied and retained for seeding. SHOULD_DELETE moves the source instead.
+  With SHOULD_DELETE false and SHOULD_WIPE_CONTENT true, the original torrent
+  tree is deliberately replaced with zero-byte placeholders. The configured
+  FINISHED_UPLOAD_PREFIX also marks downloads for placeholder recreation.
+- Videos are processed before sidecars. Existing Hebrew/English files are reused;
+  each missing language is searched independently. Subtitles are saved with
+  language suffixes such as .he.srt and .en.srt.
+- Successful uploads consume the staged files. Failed commands/retries restore
+  the original staged filename. If restoration or unmounting fails, the
+  .pyexpand-* upload workspace is retained and its location is logged.
+- Extraction cleanup preserves remaining media and every retained upload
+  workspace, including opaque encrypted recovery data.
+- Standard logging writes to the console and rotating LOGFILE when configured.
+  ORIGINAL_NAMES_LOG retains the release paths needed by the subtitle monitor.
 
-    Options -> Advanced -> Run Program
-    When download is finished, run (Change paths accordingly): 
-	'C:\Python310\pythonw.exe D:\Projects\py-expander\src\pyexpander\torrent_handler.py "%D" "%F"'
-	
-	Important: Be sure to use different directories for new downloads and completed downloads, or else pyexpander won't work.
+The DBM subtitle cache now belongs to py-expander's platform cache directory
+(typically ~/.cache/pyexpander on Linux). It starts fresh rather than sharing
+Subliminal CLI internals. File locks coordinate threads and separate hook
+processes. A staging lock also serializes jobs with the same torrent name.
+Lock files are coordination metadata; do not delete them while jobs are running.
 
-* Make sure that the transmission user can run `pyexpand`. If not:
+## Development
 
-	$ ln -s /usr/local/bin/pyexpand /usr/bin/pyexpand
+~~~sh
+python -m pytest
+python -m pytest --cov=pyexpander --cov-report=term-missing
+ruff check .
+ruff format --check .
+mypy pyexpander
+python -m build
+~~~
+
+Tests use temporary files and fake external tools. They cover staging, naming,
+multipart archives, subtitle preservation, upload rollback, encryption recovery,
+CLI hooks, and cross-process cache locks. They do not run production uploads.
+CI runs on Linux and Windows with Python 3.10, 3.12, and 3.14.
+
+For a live Hebrew smoke check, use a disposable video copy and call
+find_file_subtitles with only the desired language enabled; it writes sidecars
+but does not invoke the uploader. Verify that the chosen release matches your
+actual video before relying on audiovisual synchronization.

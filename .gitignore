@@ -40,3 +40,7 @@ docs/_build/
 
 .idea/
 .DS_STORE
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
