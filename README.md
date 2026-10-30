@@ -17,7 +17,7 @@ fork with Wizdom support, then shows-formatter and py-expander:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install "git+https://github.com/ofir123/subliminal.git@1b70f0d8b8c03eb63fbe5f3d5e7547a5083257fd"
+python -m pip install --no-cache-dir "git+https://github.com/ofir123/subliminal.git@1b70f0d8b8c03eb63fbe5f3d5e7547a5083257fd"
 python -m pip install "git+https://github.com/ofir123/shows-formatter.git"
 python -m pip install -e ".[dev]"
 ~~~
