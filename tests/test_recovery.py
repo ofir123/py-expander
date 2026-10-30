@@ -1,3 +1,4 @@
+import runpy
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,17 @@ def test_direct_file_hook_help_starts():
         [sys.executable, torrent_handler.__file__, "--help"], capture_output=True, text=True, timeout=15
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_direct_hook_errors_use_configured_log(tmp_path, monkeypatch):
+    logfile = tmp_path / "direct-hook.log"
+    monkeypatch.setattr(config, "LOGFILE", str(logfile))
+    monkeypatch.setattr(config, "SHOULD_FIND_SUBTITLES", False)
+    monkeypatch.setattr(sys, "argv", [torrent_handler.__file__, str(tmp_path / "missing")])
+    with pytest.raises(SystemExit) as error:
+        runpy.run_path(torrent_handler.__file__, run_name="__main__")
+    assert error.value.code == 1
+    assert "Torrent processing failed" in logfile.read_text()
 
 
 def test_staging_rejects_dangling_symlink(tmp_path, monkeypatch):

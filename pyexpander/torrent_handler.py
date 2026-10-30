@@ -22,7 +22,7 @@ from pyexpander.subtitles import configure_subtitles_cache
 from pyexpander.transmission import get_environment_variables_from_transmission
 from pyexpander.utils import PathLike
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pyexpander.torrent_handler")
 
 
 def _get_log_handlers() -> list[logging.Handler]:
