@@ -32,7 +32,8 @@ jobs:
               for case in ET.parse(report).iter('testcase'):
                   for tag in ('failure', 'error'):
                       for failure in case.findall(tag):
-                          detail = (failure.text or '').replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                          detail = (failure.text or '').encode('ascii', 'backslashreplace').decode('ascii')
+                          detail = detail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
                           print(f"::error title={case.get('name')}::{detail}")
       - run: ruff check .
       - run: ruff format --check .
