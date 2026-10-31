@@ -65,7 +65,7 @@ def test_download_and_upload_staging(tmp_path, monkeypatch):
         video.with_suffix(".en.srt"),
         video,
     ]
-    assert "שלום" in video.with_suffix(".he.srt").read_text()
+    assert "שלום" in video.with_suffix(".he.srt").read_text(encoding="utf-8")
     assert video.read_bytes() == b"disposable video copy"
 
 
