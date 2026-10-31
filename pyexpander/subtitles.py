@@ -113,8 +113,12 @@ def configure_subtitles_cache() -> None:
         return
     directory = Path(user_cache_dir("pyexpander"))
     directory.mkdir(parents=True, exist_ok=True)
-    region.configure(
-        "dogpile.cache.dbm",
-        expiration_time=timedelta(days=30).total_seconds(),
-        arguments={"filename": str(directory / "subliminal.dbm"), "lock_factory": SubtitleCacheLock},
-    )
+    # Backend construction opens/creates DBM before dogpile's operation locks apply.
+    with FileLock(str(directory / "initialize.lock")):
+        if region.is_configured:
+            return
+        region.configure(
+            "dogpile.cache.dbm",
+            expiration_time=timedelta(days=30).total_seconds(),
+            arguments={"filename": str(directory / "subliminal.dbm"), "lock_factory": SubtitleCacheLock},
+        )

@@ -208,6 +208,55 @@ def test_missing_wizdom_is_explained(monkeypatch):
         subtitles.configure_subtitles_cache()
 
 
+def test_fresh_cache_startup_is_serialized_across_processes(tmp_path):
+    script = """
+import sys
+import time
+from pathlib import Path
+from dogpile.cache.backends.file import DBMBackend
+from filelock import FileLock
+from pyexpander import subtitles
+
+directory = Path(sys.argv[1])
+subtitles.user_cache_dir = lambda *args: str(directory)
+original = DBMBackend._init_dbm_file
+def initialize(backend):
+    # Widen the real backend construction window and reject overlapping creators.
+    with FileLock(str(directory / 'constructor-probe.lock'), timeout=0):
+        time.sleep(0.1)
+        original(backend)
+DBMBackend._init_dbm_file = initialize
+print('ready', flush=True)
+sys.stdin.readline()
+subtitles.configure_subtitles_cache()
+subtitles.region.set(sys.argv[2], 'cached')
+assert subtitles.region.get(sys.argv[2]) == 'cached'
+"""
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", script, str(tmp_path), str(index)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for index in range(8)
+    ]
+    try:
+        for process in processes:
+            assert process.stdout.readline().strip() == "ready"
+        for process in processes:
+            process.stdin.write("start\n")
+            process.stdin.flush()
+        results = [process.communicate(timeout=30) for process in processes]
+        assert [process.returncode for process in processes] == [0] * 8, results
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+
+
 def test_cli_legacy_pair(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DEFAULT_PATH", str(tmp_path))
     monkeypatch.setattr(config, "SHOULD_FIND_SUBTITLES", False)
