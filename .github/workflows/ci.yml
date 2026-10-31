@@ -20,7 +20,20 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install --upgrade pip
       - run: python -m pip install --no-cache-dir "git+https://github.com/ofir123/subliminal.git@1b70f0d8b8c03eb63fbe5f3d5e7547a5083257fd" "git+https://github.com/ofir123/shows-formatter.git" -e ".[dev]"
-      - run: python -m pytest
+      - run: python -m pytest --junitxml=pytest-results.xml
+      - name: Report test failures
+        if: failure()
+        shell: python
+        run: |
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          report = Path('pytest-results.xml')
+          if report.exists():
+              for case in ET.parse(report).iter('testcase'):
+                  for tag in ('failure', 'error'):
+                      for failure in case.findall(tag):
+                          detail = (failure.text or '').replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                          print(f"::error title={case.get('name')}::{detail}")
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy pyexpander
